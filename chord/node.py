@@ -178,10 +178,12 @@ class ChordNode:
 class RemoteChordNode(ChordNode):
     """ ChordNode adapter for remote operations. """
 
-    def __init__(self, node_id: str, ring_size: int):
-        super().__init__(node_id, ring_size)
+    def __init__(self, node_id: str):
+        super().__init__(node_id, 0)
         self._transport = HttpChordTransport(node_id)
-        self.ring_size = ring_size
+
+    def __repr__(self):
+        return f"{__name__}({self.node_id})"
 
     def node(self) -> "ChordNode":
         return self._transport.node()
@@ -193,7 +195,7 @@ class RemoteChordNode(ChordNode):
         successor = self._transport.find_successor(key)
         if successor is None:
             return None
-        return RemoteChordNode(successor, self.ring_size)
+        return RemoteChordNode(successor)
 
     def join(self, remote_node: "ChordNode"):
         self._transport.join(remote_node)
@@ -206,7 +208,7 @@ class RemoteChordNode(ChordNode):
         predecessor = self._transport.predecessor()
         if predecessor is None:
             return None
-        return RemoteChordNode(predecessor, self.ring_size)
+        return RemoteChordNode(predecessor)
 
     def stabilize(self):
         raise NotImplementedError

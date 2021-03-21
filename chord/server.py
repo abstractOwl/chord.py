@@ -78,7 +78,7 @@ def join():
     remote_node = request.args.get("node_id")
     LOG.info("%s: Joining node %s", JOIN, remote_node)
 
-    CHORD_NODE.join(RemoteChordNode(remote_node, CHORD_NODE.ring_size))
+    CHORD_NODE.join(RemoteChordNode(remote_node))
     return jsonify({})
 
 
@@ -87,7 +87,7 @@ def notify():
     remote_node = request.args.get("node_id")
     LOG.info("%s: Notifying node %s", NOTIFY, remote_node)
 
-    CHORD_NODE.notify(RemoteChordNode(remote_node, CHORD_NODE.ring_size))
+    CHORD_NODE.notify(RemoteChordNode(remote_node))
     return jsonify({})
 
 

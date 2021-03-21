@@ -10,17 +10,17 @@ Start server:
 
 Create node:
 ```
-> python -m chord.client 127.0.0.1 4567 7 --create
+> python -m chord.client 127.0.0.1 4567 --create
 ```
 
 Join ring:
 ```
-python -m chord.client 127.0.0.1 4569 7 --join 127.0.0.1:4567
+python -m chord.client 127.0.0.1 4569 --join 127.0.0.1:4567
 ```
 
 Find successor:
 ```
-python -m chord.client 127.0.0.1 4568 7 --find_successor 0
+python -m chord.client 127.0.0.1 4568 --find_successor 0
 ```
 
 ## TODOs

@@ -13,7 +13,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Runs a Chord server.")
     parser.add_argument("hostname", type=str, help="The server hostname.")
     parser.add_argument("port", type=int, help="The server port")
-    parser.add_argument("ringSize", type=int, help="The Chord ring size")
 
     command_group = parser.add_mutually_exclusive_group()
     command_group.add_argument("--node", action='store_true',
@@ -33,11 +32,10 @@ if __name__ == '__main__':
 
     hostname = args.hostname
     port = args.port
-    ring_size = args.ringSize
 
     node_id = f"{hostname}:{port}"
 
-    node = RemoteChordNode(node_id, ring_size)
+    node = RemoteChordNode(node_id)
 
     if args.node:
         logger.info("Getting node info from [%s]", node)
@@ -50,11 +48,11 @@ if __name__ == '__main__':
         logger.info("Finding successor for [%s] starting at [%s]", key, node)
         logger.info(node.find_successor(args.find_successor))
     elif args.join:
-        remote_node = RemoteChordNode(args.join, ring_size)
+        remote_node = RemoteChordNode(args.join)
         logger.info("Joining [%s] to node [%s]", node, remote_node)
         logger.info(node.join(remote_node))
     elif args.notify:
-        remote_node = RemoteChordNode(args.join, ring_size)
+        remote_node = RemoteChordNode(args.join)
         logger.info("Notifying [%s] of node [%s]", node, remote_node)
         logger.info(node.notify(remote_node))
     elif args.predecessor:

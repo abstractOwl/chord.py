@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request
 from flask.logging import create_logger
 
 from chord.constants import (
-        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, GET, PUT
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT
 )
 from chord.exceptions import NodeFailureException
 from chord.marshaller import marshal
@@ -28,7 +28,7 @@ def schedule_maintenance_tasks():
     def loop():
         while True:
             if CHORD_NODE.successor:
-                LOG.info("Running maintainence tasks...")
+                LOG.info("Running maintenance tasks...")
 
                 try:
                     CHORD_NODE.fix_fingers()
@@ -93,18 +93,28 @@ def predecessor():
     LOG.info("%s: Getting predecessor", PREDECESSOR)
     return jsonify(marshal(CHORD_NODE.predecessor))
 
+
+@APP.route(SHUTDOWN)
+def shutdown():
+    LOG.info("%s: Shutting down", SHUTDOWN)
+    CHORD_NODE.shutdown()
+    request.environ.get('werkzeug.server.shutdown')()
+
+
 @APP.route(GET)
 def get():
     key = request.args.get("key")
     LOG.info("%s: Getting key %s", GET, key)
     return jsonify(CHORD_NODE.get(key))
 
+
 @APP.route(PUT)
 def put():
     key = request.args.get("key")
     value = request.args.get("value")
-    LOG.info("%s: Putting key %s=%s", GET, key, value)
-    return jsonify(CHORD_NODE.put(key, value))
+    no_redirect = request.args.get("no_redirect")
+    LOG.info("%s: Putting key %s=%s, no_redirect=%s", GET, key, value, no_redirect)
+    return jsonify(CHORD_NODE.put(key, value, no_redirect))
 
 
 if __name__ == '__main__':

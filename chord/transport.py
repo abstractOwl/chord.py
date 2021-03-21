@@ -3,7 +3,7 @@ from typing import Dict
 import requests
 
 from chord.constants import (
-        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, GET, PUT, TIMEOUT
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT, TIMEOUT
 )
 from chord.exceptions import NodeFailureException
 
@@ -43,8 +43,11 @@ class HttpChordTransport:
     def predecessor(self) -> Dict:
         return self._make_request(PREDECESSOR)
 
+    def shutdown(self) -> Dict:
+        return self._make_request(SHUTDOWN)
+
     def get(self, key: str) -> str:
         return self._make_request(GET, key=key)
 
-    def put(self, key: str, value: str):
-        return self._make_request(PUT, key=key, value=value)
+    def put(self, key: str, value: str, no_redirect: bool=False):
+        return self._make_request(PUT, key=key, value=value, no_redirect=no_redirect)

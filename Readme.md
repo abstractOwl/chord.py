@@ -36,4 +36,3 @@ $ python -m chord.client 127.0.0.1 4568 --get foo
 
 ## TODOs
 * Handle failing nodes
-* Shift keys during clean node exit

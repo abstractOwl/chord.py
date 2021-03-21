@@ -4,6 +4,7 @@ NOTIFY: str = "/notify"
 FIND_SUCCESSOR: str = "/find_successor"
 PREDECESSOR: str = "/predecessor"
 JOIN: str = "/join"
+SHUTDOWN: str = "/shutdown"
 GET: str = "/get"
 PUT: str = "/put"
 TIMEOUT: int = 30

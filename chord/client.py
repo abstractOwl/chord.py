@@ -27,6 +27,8 @@ if __name__ == '__main__':
             help="Notifies a node that a node might be its predecessor")
     command_group.add_argument("--predecessor", action='store_true',
             help="Returns the predecessor node")
+    command_group.add_argument("--shutdown", action='store_true',
+            help="Shuts the node down gracefully")
     command_group.add_argument("--get", type=str,
             help="Returns the stored value for a key")
     command_group.add_argument("--put", type=str,
@@ -62,6 +64,9 @@ if __name__ == '__main__':
     elif args.predecessor:
         logger.info("Getting predecessor info from [%s]", node)
         logger.info(node.predecessor)
+    elif args.shutdown:
+        logger.info("Shutting node [%s] down gracefully", node)
+        node.shutdown()
     elif args.get:
         logger.info("Getting key [%s]", args.get)
         logger.info(node.get(args.get))

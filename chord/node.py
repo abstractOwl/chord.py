@@ -21,6 +21,7 @@ class ChordNode:
         self._predecessor = None
         self._storage = storage
         self._next = 0
+        self._is_shutdown = False
 
         self.ring_size = ring_size
         self.fingers = deque([None] * ring_size, ring_size)
@@ -98,7 +99,7 @@ class ChordNode:
             # TODO: Check that possible_successor is alive
             self.successor = possible_successor
 
-        if self.successor != self:
+        if self.successor != self and not self._is_shutdown:
             self.successor.notify(self)
 
     def notify(self, remote_node):
@@ -166,6 +167,17 @@ class ChordNode:
                 return finger
         return self
 
+    def shutdown(self) -> Dict:
+        """ Shuts down the node gracefully. """
+        self._is_shutdown = True
+        self._predecessor = self.successor
+        self.successor.notify(self.predecessor)
+
+        for key in self._storage.list():
+            self.successor.put(key, self._storage.get(key), True)
+
+        return {}
+
     @property
     def successor(self) -> "ChordNode":
         """ Returns the successor node. """
@@ -193,9 +205,17 @@ class ChordNode:
             }
         return node.get(key)
 
-    def put(self, key: str, value: str) -> Dict:
+    def put(self, key: str, value: str, no_redirect: bool=False) -> Dict:
+        """
+        Puts a value into Chord storage.
+        :param key: The string key to store
+        :param value: The string value to associate with the key
+        :param no_redirect: True if the specified value should be posted
+                            directly to the storage of this node, rather
+                            than to the key's successor.
+        """
         node = self.find_successor(key)
-        if node == self:
+        if node == self or no_redirect:
             self._storage.put(key, value)
             return {
                 "storage_node": self.node_id
@@ -238,11 +258,14 @@ class RemoteChordNode(ChordNode):
             return None
         return RemoteChordNode(predecessor["node_id"])
 
+    def shutdown(self) -> Dict:
+        return self._transport.shutdown()
+
     def get(self, key: str) -> str:
         return self._transport.get(key)
 
-    def put(self, key: str, value: str):
-        return self._transport.put(key, value)
+    def put(self, key: str, value: str, no_redirect: bool=False):
+        return self._transport.put(key, value, no_redirect=no_redirect)
 
     def stabilize(self):
         raise NotImplementedError

@@ -27,6 +27,10 @@ if __name__ == '__main__':
             help="Notifies a node that a node might be its predecessor")
     command_group.add_argument("--predecessor", action='store_true',
             help="Returns the predecessor node")
+    command_group.add_argument("--get", type=str,
+            help="Returns the stored value for a key")
+    command_group.add_argument("--put", type=str,
+            help="Stores a value in Chord (format 'key=value')")
 
     args = parser.parse_args()
 
@@ -58,5 +62,12 @@ if __name__ == '__main__':
     elif args.predecessor:
         logger.info("Getting predecessor info from [%s]", node)
         logger.info(node.predecessor)
+    elif args.get:
+        logger.info("Getting key [%s]", args.get)
+        logger.info(node.get(args.get))
+    elif args.put:
+        key, value = args.put.split("=", 1)
+        logger.info("Putting key [%s] = value [%s]", key, value)
+        logger.info(node.put(key, value))
     else:
         logger.error("Must specify a command")

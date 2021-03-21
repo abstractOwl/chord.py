@@ -5,7 +5,7 @@ See https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 """
 from collections import deque
 from hashlib import sha256
-from typing import Union
+from typing import Dict, Union
 import logging
 
 from chord.exceptions import NodeFailureException
@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ChordNode:
     """ Base Chord DHT Node implementation. """
-    def __init__(self, node_id, ring_size):
+    def __init__(self, node_id, storage, ring_size):
         self.node_id = node_id
         self._predecessor = None
+        self._storage = storage
         self._next = 0
 
         self.ring_size = ring_size
@@ -183,12 +184,30 @@ class ChordNode:
     def predecessor(self, value):
         self._predecessor = value
 
+    def get(self, key: str) -> Dict:
+        node = self.find_successor(key)
+        if node == self:
+            return {
+                "value": self._storage.get(key),
+                "storage_node": self.node_id
+            }
+        return node.get(key)
+
+    def put(self, key: str, value: str) -> Dict:
+        node = self.find_successor(key)
+        if node == self:
+            self._storage.put(key, value)
+            return {
+                "storage_node": self.node_id
+            }
+        return node.put(key, value)
+
 
 class RemoteChordNode(ChordNode):
     """ ChordNode adapter for remote operations. """
 
     def __init__(self, node_id: str):
-        super().__init__(node_id, 0)
+        super().__init__(node_id, None, 0)
         self._transport = HttpChordTransport(node_id)
 
     def __repr__(self):
@@ -218,6 +237,12 @@ class RemoteChordNode(ChordNode):
         if "node_id" not in predecessor:
             return None
         return RemoteChordNode(predecessor["node_id"])
+
+    def get(self, key: str) -> str:
+        return self._transport.get(key)
+
+    def put(self, key: str, value: str):
+        return self._transport.put(key, value)
 
     def stabilize(self):
         raise NotImplementedError

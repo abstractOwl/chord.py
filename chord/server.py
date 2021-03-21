@@ -6,10 +6,13 @@ import time
 from flask import Flask, jsonify, request
 from flask.logging import create_logger
 
-from chord.constants import (NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR)
+from chord.constants import (
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, GET, PUT
+)
 from chord.exceptions import NodeFailureException
 from chord.marshaller import marshal
 from chord.node import ChordNode, RemoteChordNode
+from chord.storage import DictChordStorage
 
 
 APP = Flask(__name__)
@@ -90,6 +93,19 @@ def predecessor():
     LOG.info("%s: Getting predecessor", PREDECESSOR)
     return jsonify(marshal(CHORD_NODE.predecessor))
 
+@APP.route(GET)
+def get():
+    key = request.args.get("key")
+    LOG.info("%s: Getting key %s", GET, key)
+    return jsonify(CHORD_NODE.get(key))
+
+@APP.route(PUT)
+def put():
+    key = request.args.get("key")
+    value = request.args.get("value")
+    LOG.info("%s: Putting key %s=%s", GET, key, value)
+    return jsonify(CHORD_NODE.put(key, value))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Runs a Chord server.")
@@ -104,5 +120,5 @@ if __name__ == '__main__':
     node_id = f"{hostname}:{port}"
 
     LOG.info("Running on %s with ring size %s...", node_id, ring_size)
-    CHORD_NODE = ChordNode(node_id, ring_size)
+    CHORD_NODE = ChordNode(node_id, DictChordStorage(), ring_size)
     APP.run(hostname, port)

@@ -1,8 +1,9 @@
+from typing import Dict
+
 import requests
 
 from chord.constants import (NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, TIMEOUT)
 from chord.exceptions import NodeFailureException
-from chord.marshaller import unmarshal
 
 
 class HttpChordTransport:
@@ -22,14 +23,14 @@ class HttpChordTransport:
         except requests.exceptions.RequestException as ex:
             raise NodeFailureException(f"Failed: {self.node_id}{command}") from ex
 
-    def node(self) -> "ChordNode":
-        return unmarshal(self._make_request(NODE))
+    def node(self) -> Dict:
+        return self._make_request(NODE)
 
     def create(self):
         self._make_request(CREATE)
 
-    def find_successor(self, key: int) -> "ChordNode":
-        return unmarshal(self._make_request(FIND_SUCCESSOR, key=key))
+    def find_successor(self, key: int) -> Dict:
+        return self._make_request(FIND_SUCCESSOR, key=key)
 
     def join(self, remote_node: "ChordNode"):
         self._make_request(JOIN, node_id=remote_node.node_id)
@@ -37,5 +38,5 @@ class HttpChordTransport:
     def notify(self, remote_node: "ChordNode"):
         self._make_request(NOTIFY, node_id=remote_node.node_id)
 
-    def predecessor(self) -> "ChordNode":
-        return unmarshal(self._make_request(PREDECESSOR))
+    def predecessor(self) -> Dict:
+        return self._make_request(PREDECESSOR)

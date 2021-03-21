@@ -19,7 +19,6 @@ class ChordNode:
     def __init__(self, node_id, ring_size):
         self.node_id = node_id
         self._predecessor = None
-        self._successor = None
         self._next = 0
 
         self.ring_size = ring_size
@@ -73,7 +72,7 @@ class ChordNode:
         """ Creates a Chord ring. """
         if self.successor:
             raise RuntimeError("Node already initialized")
-        self._successor = self
+        self.successor = self
 
     def join(self, remote_node: "ChordNode"):
         """
@@ -82,8 +81,7 @@ class ChordNode:
         """
         if self.successor:
             raise RuntimeError("Node already initialized")
-        self._successor = remote_node.find_successor(self._bucketize(self.node_id))
-        self.successor.notify(self)
+        self.successor = remote_node.find_successor(self._bucketize(self.node_id))
 
     def node(self) -> "ChordNode":
         """ Returns this ChordNode. """
@@ -96,19 +94,22 @@ class ChordNode:
         possible_successor = self.successor.predecessor
 
         if possible_successor and self._between_nodes(possible_successor, self, self.successor):
-            self._successor = possible_successor
+            # TODO: Check that possible_successor is alive
+            self.successor = possible_successor
+
+        if self.successor != self:
             self.successor.notify(self)
 
     def notify(self, remote_node):
         """
         Notify this node that a remote node thinks this is its predecessor.
         """
-        if (self._predecessor is None
-                or self._between_nodes(remote_node, self._predecessor, self)):
-            self._predecessor = remote_node
+        if (self.predecessor is None
+                or self._between_nodes(remote_node, self.predecessor, self)):
+            self.predecessor = remote_node
 
             if self.successor == self:  # Base case: set successor when expanding from 1 to 2 nodes
-                self._successor = remote_node
+                self.successor = remote_node
 
     def fix_fingers(self):
         """ Refreshes finger table entries. """
@@ -126,7 +127,7 @@ class ChordNode:
             try:
                 self.predecessor.node()
             except NodeFailureException:
-                self._predecessor = None
+                self.predecessor = None
 
     def find_successor(self, key: Union[int, str]) -> "ChordNode":
         """
@@ -167,12 +168,20 @@ class ChordNode:
     @property
     def successor(self) -> "ChordNode":
         """ Returns the successor node. """
-        return self._successor
+        return self.fingers[0]
+
+    @successor.setter
+    def successor(self, value):
+        self.fingers[0] = value
 
     @property
     def predecessor(self) -> "ChordNode":
         """ Returns the predecessor node. """
         return self._predecessor
+
+    @predecessor.setter
+    def predecessor(self, value):
+        self._predecessor = value
 
 
 class RemoteChordNode(ChordNode):
@@ -193,9 +202,9 @@ class RemoteChordNode(ChordNode):
 
     def find_successor(self, key: int) -> "ChordNode":
         successor = self._transport.find_successor(key)
-        if successor is None:
+        if "node_id" not in successor:
             return None
-        return RemoteChordNode(successor)
+        return RemoteChordNode(successor["node_id"])
 
     def join(self, remote_node: "ChordNode"):
         self._transport.join(remote_node)
@@ -206,9 +215,9 @@ class RemoteChordNode(ChordNode):
     @property
     def predecessor(self) -> "ChordNode":
         predecessor = self._transport.predecessor()
-        if predecessor is None:
+        if "node_id" not in predecessor:
             return None
-        return RemoteChordNode(predecessor)
+        return RemoteChordNode(predecessor["node_id"])
 
     def stabilize(self):
         raise NotImplementedError

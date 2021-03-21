@@ -25,12 +25,7 @@ def schedule_maintenance_tasks():
     def loop():
         while True:
             if CHORD_NODE.successor:
-                node_state = {
-                    "predecessor": CHORD_NODE.predecessor,
-                    "successor": CHORD_NODE.successor,
-                    "finger_table": CHORD_NODE.fingers
-                }
-                LOG.info("Node state: %s", node_state)
+                LOG.info("Running maintainence tasks...")
 
                 try:
                     CHORD_NODE.fix_fingers()
@@ -42,12 +37,11 @@ def schedule_maintenance_tasks():
                 except NodeFailureException:
                     LOG.info("Node failed while trying to stabilize")
 
-                try:
-                    CHORD_NODE.check_predecessor()
-                except NodeFailureException:
-                    LOG.info("Node failed while checking predecessor")
+                CHORD_NODE.check_predecessor()
 
-            time.sleep(5)
+                LOG.info("Done.")
+
+            time.sleep(1)
 
     thread = threading.Thread(target=loop)
     thread.start()

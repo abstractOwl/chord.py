@@ -1,10 +1,8 @@
 # chord.py
-A toy Python implementation of Chord DHT:
-https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
+A toy Python implementation of Chord DHT.
 
 ## Examples:
 Start server:
-(Ring size should be sufficiently large to avoid node id collisions)
 ```
 $ python -m chord.server 127.0.0.1 4568 17
 ```
@@ -34,5 +32,16 @@ Get value:
 $ python -m chord.client 127.0.0.1 4568 --get foo
 ```
 
+Shutdown node gracefully: (ctrl+c for ungraceful shutdown)
+```
+$ python -m chord.client 127.0.0.1 4568 --shutdown
+```
+
 ## TODOs
-* Handle failing nodes
+* Implement successor list
+* Implement multiple buckets per node to increase likelihood of a more even
+  distribution of keys
+
+## Resources
+* [Chord: A Scalable Peer-to-peer Lookup Protocol for Internet Applications](https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf)
+* [How to Make Chord Correct](https://arxiv.org/pdf/1502.06461.pdf)

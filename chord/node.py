@@ -47,13 +47,11 @@ class ChordNode:
         """
         Returns True if the target falls between the lower and higher buckets.
         """
-        if lower == higher:  # Special case when node owns entire ring
-            return True
+        if lower < higher:
+            return lower < target < higher
 
-        if lower > higher:  # Wrap-around case
-            return lower < target or target < higher
-
-        return lower < target < higher
+        # Wrap-around case, also True in cases where lower == higher
+        return lower < target or target < higher
 
     def _between_nodes(
             self,
@@ -86,8 +84,12 @@ class ChordNode:
         self.successor = remote_node.find_successor(self._bucketize(self.node_id))
 
     def node(self) -> "ChordNode":
-        """ Returns this ChordNode. """
+        """ Returns this ChordNode. Essentially used as a ping operation. """
         return self
+
+    def is_alive(self) -> bool:
+        """ Return True if this node is alive. """
+        return True
 
     def stabilize(self):
         """
@@ -95,7 +97,8 @@ class ChordNode:
         """
         possible_successor = self.successor.predecessor
 
-        if possible_successor and self._between_nodes(possible_successor, self, self.successor):
+        if (possible_successor and self._between_nodes(possible_successor, self, self.successor)
+                and possible_successor.is_alive()):
             self.successor = possible_successor
 
         if self.successor != self and not self._is_shutdown:
@@ -107,6 +110,8 @@ class ChordNode:
         """
         if (self.predecessor is None
                 or self._between_nodes(remote_node, self.predecessor, self)):
+            self.predecessor = remote_node
+        elif not self.predecessor.is_alive():
             self.predecessor = remote_node
 
     def fix_fingers(self):
@@ -121,11 +126,8 @@ class ChordNode:
 
     def check_predecessor(self):
         """ Check that the predecessor is still alive. """
-        if self.predecessor:
-            try:
-                self.predecessor.node()
-            except NodeFailureException:
-                self.predecessor = None
+        if self.predecessor and not self.predecessor.is_alive():
+            self.predecessor = None
 
     def find_successor(self, key: Union[int, str]) -> "ChordNode":
         """
@@ -142,6 +144,9 @@ class ChordNode:
                 self._bucketize(self.node_id),
                 self._bucketize(self.successor.node_id)
         ) or self._bucketize(self.successor.node_id) == key):
+            if not self.successor.is_alive():
+                return self
+
             return self.successor
 
         closest = self.closest_preceding_node(key)
@@ -157,9 +162,10 @@ class ChordNode:
         """
         for finger in iter(reversed(self.fingers)):
             if finger and self._between(
-                    self._bucketize(finger.node_id),
-                    self._bucketize(self.node_id),
-                    key):
+                self._bucketize(finger.node_id),
+                self._bucketize(self.node_id),
+                key
+            ) and finger.is_alive():
                 return finger
         return self
 
@@ -193,6 +199,10 @@ class ChordNode:
         self._predecessor = value
 
     def get(self, key: str) -> Dict:
+        """
+        Returns the value for a key from Chord storage.
+        :param key: The string key to retrieve a value for
+        """
         node = self.find_successor(key)
         if node == self:
             return {
@@ -231,6 +241,13 @@ class RemoteChordNode(ChordNode):
 
     def node(self) -> "ChordNode":
         return self._transport.node()
+
+    def is_alive(self) -> bool:
+        try:
+            self.node()
+            return True
+        except NodeFailureException:
+            return False
 
     def create(self):
         self._transport.create()

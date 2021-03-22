@@ -149,7 +149,10 @@ class ChordNode:
 
             return self.successor
 
-        return self.closest_preceding_node(key).find_successor(key)
+        closest = self.closest_preceding_node(key)
+        if closest == self:
+            return self
+        return closest.find_successor(key)
 
     def closest_preceding_node(self, key: int) -> "ChordNode":
         """

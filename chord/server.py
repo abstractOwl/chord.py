@@ -112,7 +112,7 @@ def get():
 def put():
     key = request.args.get("key")
     value = request.args.get("value")
-    no_redirect = request.args.get("no_redirect")
+    no_redirect = request.args.get("no_redirect") == "True"
     LOG.info("%s: Putting key %s=%s, no_redirect=%s", GET, key, value, no_redirect)
     return jsonify(CHORD_NODE.put(key, value, no_redirect))
 

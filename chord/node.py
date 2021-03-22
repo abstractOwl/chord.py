@@ -39,7 +39,7 @@ class ChordNode:
         :param key: The key to hash
         """
         digest = sha256(string.encode()).digest()
-        bucket = int.from_bytes(digest, 'big') % self.ring_size
+        bucket = int.from_bytes(digest, 'big') % 2 ** self.ring_size
         return bucket
 
     @staticmethod
@@ -96,7 +96,6 @@ class ChordNode:
         possible_successor = self.successor.predecessor
 
         if possible_successor and self._between_nodes(possible_successor, self, self.successor):
-            # TODO: Check that possible_successor is alive
             self.successor = possible_successor
 
         if self.successor != self and not self._is_shutdown:
@@ -110,14 +109,11 @@ class ChordNode:
                 or self._between_nodes(remote_node, self.predecessor, self)):
             self.predecessor = remote_node
 
-            if self.successor == self:  # Base case: set successor when expanding from 1 to 2 nodes
-                self.successor = remote_node
-
     def fix_fingers(self):
         """ Refreshes finger table entries. """
         finger_bucket = self._bucketize(self.node_id)
-        finger_bucket += 2 ** (self._next - 1)
-        finger_bucket = finger_bucket % self.ring_size
+        finger_bucket += 2 ** self._next
+        finger_bucket %= 2 ** self.ring_size
 
         self.fingers[self._next] = self.find_successor(finger_bucket)
 
@@ -139,7 +135,7 @@ class ChordNode:
         if isinstance(key, str):
             key = self._bucketize(key)
 
-        key %= self.ring_size
+        key %= 2 ** self.ring_size
 
         if (self._between(
                 key,

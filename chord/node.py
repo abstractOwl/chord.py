@@ -149,10 +149,7 @@ class ChordNode:
 
             return self.successor
 
-        closest = self.closest_preceding_node(key)
-        if closest == self:
-            return self
-        return closest.find_successor(key)
+        return self.closest_preceding_node(key).find_successor(key)
 
     def closest_preceding_node(self, key: int) -> "ChordNode":
         """
@@ -292,6 +289,14 @@ class RemoteChordNode(ChordNode):
     def closest_preceding_node(self, key: int) -> "ChordNode":
         raise NotImplementedError
 
+    @predecessor.setter
+    def predecessor(self, value):
+        raise NotImplementedError
+
     @property
     def successor(self):
+        raise NotImplementedError
+
+    @successor.setter
+    def successor(self, value):
         raise NotImplementedError

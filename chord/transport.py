@@ -31,7 +31,7 @@ class HttpChordTransport:
     def create(self):
         self._make_request(CREATE)
 
-    def find_successor(self, key: int) -> Dict:
+    def find_successor(self, key: int) -> (Dict, int):
         return self._make_request(FIND_SUCCESSOR, key=key)
 
     def join(self, remote_node: "ChordNode"):

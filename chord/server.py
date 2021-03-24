@@ -67,7 +67,11 @@ def create():
 def find_successor():
     key = int(request.args.get("key"))
     LOG.info("%s: Finding successor for %s", FIND_SUCCESSOR, key)
-    return jsonify(marshal(CHORD_NODE.find_successor(key)))
+    target, hops = CHORD_NODE.find_successor(key)
+    return jsonify({
+        "hops": hops,
+        "successor": marshal(target)
+    })
 
 
 @APP.route(JOIN)

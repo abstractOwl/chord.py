@@ -81,7 +81,7 @@ class ChordNode:
         """
         if self.successor:
             raise RuntimeError("Node already initialized")
-        self.successor = remote_node.find_successor(self._bucketize(self.node_id))
+        self.successor, _ = remote_node.find_successor(self._bucketize(self.node_id))
 
     def node(self) -> "ChordNode":
         """ Returns this ChordNode. Essentially used as a ping operation. """
@@ -120,7 +120,7 @@ class ChordNode:
         finger_bucket += 2 ** self._next
         finger_bucket %= 2 ** self.ring_size
 
-        self.fingers[self._next] = self.find_successor(finger_bucket)
+        self.fingers[self._next], _ = self.find_successor(finger_bucket)
 
         self._next = (self._next + 1) % self.ring_size
 
@@ -129,7 +129,7 @@ class ChordNode:
         if self.predecessor and not self.predecessor.is_alive():
             self.predecessor = None
 
-    def find_successor(self, key: Union[int, str]) -> "ChordNode":
+    def find_successor(self, key: Union[int, str]) -> ("ChordNode", int):
         """
         Returns the successor node for a given key or bucket.
         :param key: A string key or numeric bucket
@@ -145,14 +145,15 @@ class ChordNode:
                 self._bucketize(self.successor.node_id)
         ) or self._bucketize(self.successor.node_id) == key):
             if not self.successor.is_alive():
-                return self
+                return self, 1
 
-            return self.successor
+            return self.successor, 1
 
         closest = self.closest_preceding_node(key)
         if closest == self:
-            return self
-        return closest.find_successor(key)
+            return self, 1
+        target, hops = closest.find_successor(key)
+        return target, hops + 1
 
     def closest_preceding_node(self, key: int) -> "ChordNode":
         """
@@ -203,11 +204,12 @@ class ChordNode:
         Returns the value for a key from Chord storage.
         :param key: The string key to retrieve a value for
         """
-        node = self.find_successor(key)
+        node, hops = self.find_successor(key)
         if node == self:
             return {
-                "value": self._storage.get(key),
-                "storage_node": self.node_id
+                "hops": hops,
+                "storage_node": self.node_id,
+                "value": self._storage.get(key)
             }
         return node.get(key)
 
@@ -220,10 +222,11 @@ class ChordNode:
                             directly to the storage of this node, rather
                             than to the key's successor.
         """
-        node = self.find_successor(key)
+        node, hops = self.find_successor(key)
         if node == self or no_redirect:
             self._storage.put(key, value)
             return {
+                "hops": hops,
                 "storage_node": self.node_id
             }
         return node.put(key, value)
@@ -252,11 +255,13 @@ class RemoteChordNode(ChordNode):
     def create(self):
         self._transport.create()
 
-    def find_successor(self, key: int) -> "ChordNode":
-        successor = self._transport.find_successor(key)
-        if "node_id" not in successor:
-            return None
-        return RemoteChordNode(successor["node_id"])
+    def find_successor(self, key: int) -> ("ChordNode", int):
+        result = self._transport.find_successor(key)
+        successor = result["successor"]
+        hops = result["hops"]
+
+        node = RemoteChordNode(successor["node_id"]) if "node_id" in successor else None
+        return node, hops
 
     def join(self, remote_node: "ChordNode"):
         self._transport.join(remote_node)

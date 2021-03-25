@@ -12,10 +12,10 @@ class HttpChordTransport:
     """
     HTTP transport implementation for Chord. node_id is {hostname}:{port}.
     """
-    def __init__(self, node_id):
+    def __init__(self, node_id: int):
         self.node_id = node_id
 
-    def _make_request(self, command, **params):
+    def _make_request(self, command: str, **params):
         try:
             return requests.get(
                     f"http://{self.node_id}{command}",
@@ -31,8 +31,12 @@ class HttpChordTransport:
     def create(self):
         self._make_request(CREATE)
 
-    def find_successor(self, key: int) -> (Dict, int):
-        return self._make_request(FIND_SUCCESSOR, key=key)
+    def find_successor(self, key: int) -> (str, int):
+        result = self._make_request(FIND_SUCCESSOR, key=key)
+        hops = result["hops"]
+        if "node_id" in result["successor"]:
+            return result["successor"]["node_id"], hops
+        return None, hops
 
     def join(self, remote_node: "ChordNode"):
         self._make_request(JOIN, node_id=remote_node.node_id)
@@ -41,7 +45,10 @@ class HttpChordTransport:
         self._make_request(NOTIFY, node_id=remote_node.node_id)
 
     def predecessor(self) -> Dict:
-        return self._make_request(PREDECESSOR)
+        predecessor = self._make_request(PREDECESSOR)
+        if "node_id" in predecessor:
+            return predecessor["node_id"]
+        return None
 
     def shutdown(self) -> Dict:
         return self._make_request(SHUTDOWN)
@@ -51,3 +58,8 @@ class HttpChordTransport:
 
     def put(self, key: str, value: str, no_redirect: bool=False):
         return self._make_request(PUT, key=key, value=value, no_redirect=no_redirect)
+
+
+class HttpChordTransportFactory:
+    def new_transport(self, node_id: int):
+        return HttpChordTransport(node_id)

@@ -13,10 +13,12 @@ from chord.exceptions import NodeFailureException
 from chord.marshaller import marshal
 from chord.node import ChordNode, RemoteChordNode
 from chord.storage import DictChordStorage
+from chord.transport import HttpChordTransportFactory
 
 
 APP = Flask(__name__)
 CHORD_NODE = None
+TRANSPORT_FACTORY = HttpChordTransportFactory()
 
 logging.basicConfig()
 LOG = create_logger(APP)
@@ -79,7 +81,7 @@ def join():
     remote_node = request.args.get("node_id")
     LOG.info("%s: Joining node %s", JOIN, remote_node)
 
-    CHORD_NODE.join(RemoteChordNode(remote_node))
+    CHORD_NODE.join(RemoteChordNode(TRANSPORT_FACTORY, remote_node))
     return jsonify({})
 
 
@@ -88,7 +90,7 @@ def notify():
     remote_node = request.args.get("node_id")
     LOG.info("%s: Notifying node %s", NOTIFY, remote_node)
 
-    CHORD_NODE.notify(RemoteChordNode(remote_node))
+    CHORD_NODE.notify(RemoteChordNode(TRANSPORT_FACTORY, remote_node))
     return jsonify({})
 
 

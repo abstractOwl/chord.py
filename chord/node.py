@@ -235,9 +235,10 @@ class ChordNode:
 class RemoteChordNode(ChordNode):
     """ ChordNode adapter for remote operations. """
 
-    def __init__(self, node_id: str):
+    def __init__(self, transport_factory, node_id: str):
         super().__init__(node_id, None, 0)
-        self._transport = HttpChordTransport(node_id)
+        self._transport_factory = transport_factory
+        self._transport = transport_factory.new_transport(node_id)
 
     def __repr__(self):
         return f"{__name__}({self.node_id})"
@@ -256,12 +257,11 @@ class RemoteChordNode(ChordNode):
         self._transport.create()
 
     def find_successor(self, key: int) -> ("ChordNode", int):
-        result = self._transport.find_successor(key)
-        successor = result["successor"]
-        hops = result["hops"]
+        node_id, hops = self._transport.find_successor(key)
 
-        node = RemoteChordNode(successor["node_id"]) if "node_id" in successor else None
-        return node, hops
+        if node_id is None:
+            return None, hops
+        return RemoteChordNode(self._transport_factory, node_id), hops
 
     def join(self, remote_node: "ChordNode"):
         self._transport.join(remote_node)
@@ -271,10 +271,10 @@ class RemoteChordNode(ChordNode):
 
     @property
     def predecessor(self) -> "ChordNode":
-        predecessor = self._transport.predecessor()
-        if "node_id" not in predecessor:
+        node_id = self._transport.predecessor()
+        if node_id is None:
             return None
-        return RemoteChordNode(predecessor["node_id"])
+        return RemoteChordNode(self._transport_factory, node_id)
 
     def shutdown(self) -> Dict:
         return self._transport.shutdown()

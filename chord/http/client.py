@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from chord.node import RemoteChordNode
-from chord.transport import HttpChordTransportFactory
+from chord.http.transport import HttpChordTransportFactory
 
 
 logging.basicConfig()

@@ -6,14 +6,14 @@ import time
 from flask import Flask, jsonify, request
 from flask.logging import create_logger
 
-from chord.constants import (
+from chord.exceptions import NodeFailureException
+from chord.http.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT
 )
-from chord.exceptions import NodeFailureException
-from chord.marshaller import marshal
+from chord.http.marshaller import marshal
+from chord.http.transport import HttpChordTransportFactory
 from chord.node import ChordNode, RemoteChordNode
 from chord.storage import DictChordStorage
-from chord.transport import HttpChordTransportFactory
 
 
 APP = Flask(__name__)
@@ -48,7 +48,7 @@ def schedule_maintenance_tasks():
 
             time.sleep(1)
 
-    thread = threading.Thread(target=loop)
+    thread = threading.Thread(target=loop, daemon=True)
     thread.start()
 
 

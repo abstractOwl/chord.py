@@ -2,10 +2,10 @@ from typing import Dict
 
 import requests
 
-from chord.constants import (
+from chord.exceptions import NodeFailureException
+from chord.http.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT, TIMEOUT
 )
-from chord.exceptions import NodeFailureException
 
 
 class HttpChordTransport:

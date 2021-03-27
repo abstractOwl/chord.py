@@ -9,7 +9,7 @@ from typing import Dict, Union
 import logging
 
 from chord.exceptions import NodeFailureException
-from chord.transport import HttpChordTransport
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class ChordNode:
         self._is_shutdown = False
 
         self.ring_size = ring_size
-        self.fingers = deque([None] * ring_size, ring_size)
+        self.fingers = [None] * ring_size
 
     def __eq__(self, other):
         return isinstance(other, ChordNode) and self.node_id == other.node_id
@@ -87,7 +87,8 @@ class ChordNode:
         """ Returns this ChordNode. Essentially used as a ping operation. """
         return self
 
-    def is_alive(self) -> bool:
+    @staticmethod
+    def is_alive() -> bool:
         """ Return True if this node is alive. """
         return True
 

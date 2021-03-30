@@ -3,9 +3,8 @@ Implements the Chord node.
 
 See https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 """
-from collections import deque
 from hashlib import sha256
-from typing import Dict, Union
+from typing import Dict, Optional, Tuple, Union
 import logging
 
 from chord.exceptions import NodeFailureException
@@ -87,8 +86,7 @@ class ChordNode:
         """ Returns this ChordNode. Essentially used as a ping operation. """
         return self
 
-    @staticmethod
-    def is_alive() -> bool:
+    def is_alive(self) -> bool:
         """ Return True if this node is alive. """
         return True
 
@@ -130,18 +128,16 @@ class ChordNode:
         if self.predecessor and not self.predecessor.is_alive():
             self.predecessor = None
 
-    def find_successor(self, key: Union[int, str]) -> ("ChordNode", int):
+    def find_successor(self, key: Union[int, str]) -> Tuple["ChordNode", int]:
         """
         Returns the successor node for a given key or bucket.
         :param key: A string key or numeric bucket
         """
-        if isinstance(key, str):
-            key = self._bucketize(key)
-
-        key %= 2 ** self.ring_size
+        key_bucket = self._bucketize(key) if isinstance(key, str) else key
+        key_bucket %= 2 ** self.ring_size
 
         if (self._between(
-                key,
+                key_bucket,
                 self._bucketize(self.node_id),
                 self._bucketize(self.successor.node_id)
         ) or self._bucketize(self.successor.node_id) == key):
@@ -150,10 +146,10 @@ class ChordNode:
 
             return self.successor, 1
 
-        closest = self.closest_preceding_node(key)
+        closest = self.closest_preceding_node(key_bucket)
         if closest == self:
             return self, 1
-        target, hops = closest.find_successor(key)
+        target, hops = closest.find_successor(key_bucket)
         return target, hops + 1
 
     def closest_preceding_node(self, key: int) -> "ChordNode":
@@ -192,7 +188,7 @@ class ChordNode:
         self.fingers[0] = value
 
     @property
-    def predecessor(self) -> "ChordNode":
+    def predecessor(self) -> Optional["ChordNode"]:
         """ Returns the predecessor node. """
         return self._predecessor
 
@@ -257,11 +253,11 @@ class RemoteChordNode(ChordNode):
     def create(self):
         self._transport.create()
 
-    def find_successor(self, key: int) -> ("ChordNode", int):
-        node_id, hops = self._transport.find_successor(key)
+    def find_successor(self, key: Union[int, str]) -> Tuple[ChordNode, int]:
+        key_bucket = self._bucketize(key) if isinstance(key, str) else key
+        key_bucket %= 2 ** self.ring_size
 
-        if node_id is None:
-            return None, hops
+        node_id, hops = self._transport.find_successor(key_bucket)
         return RemoteChordNode(self._transport_factory, node_id), hops
 
     def join(self, remote_node: "ChordNode"):
@@ -271,16 +267,20 @@ class RemoteChordNode(ChordNode):
         self._transport.notify(remote_node)
 
     @property
-    def predecessor(self) -> "ChordNode":
+    def predecessor(self) -> Optional["ChordNode"]:
         node_id = self._transport.predecessor()
         if node_id is None:
             return None
         return RemoteChordNode(self._transport_factory, node_id)
 
+    @predecessor.setter
+    def predecessor(self, value):
+        raise NotImplementedError
+
     def shutdown(self) -> Dict:
         return self._transport.shutdown()
 
-    def get(self, key: str) -> str:
+    def get(self, key: str) -> Dict[str, str]:
         return self._transport.get(key)
 
     def put(self, key: str, value: str, no_redirect: bool=False):
@@ -296,10 +296,6 @@ class RemoteChordNode(ChordNode):
         raise NotImplementedError
 
     def closest_preceding_node(self, key: int) -> "ChordNode":
-        raise NotImplementedError
-
-    @predecessor.setter
-    def predecessor(self, value):
         raise NotImplementedError
 
     @property

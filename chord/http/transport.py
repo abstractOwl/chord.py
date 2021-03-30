@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 import requests
 
@@ -6,6 +6,7 @@ from chord.exceptions import NodeFailureException
 from chord.http.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT, TIMEOUT
 )
+from chord.node import ChordNode
 
 
 class HttpChordTransport:
@@ -31,20 +32,18 @@ class HttpChordTransport:
     def create(self):
         self._make_request(CREATE)
 
-    def find_successor(self, key: int) -> (str, int):
+    def find_successor(self, key: int) -> Tuple[str, int]:
         result = self._make_request(FIND_SUCCESSOR, key=key)
         hops = result["hops"]
-        if "node_id" in result["successor"]:
-            return result["successor"]["node_id"], hops
-        return None, hops
+        return result["successor"]["node_id"], hops
 
-    def join(self, remote_node: "ChordNode"):
+    def join(self, remote_node: ChordNode):
         self._make_request(JOIN, node_id=remote_node.node_id)
 
-    def notify(self, remote_node: "ChordNode"):
+    def notify(self, remote_node: ChordNode):
         self._make_request(NOTIFY, node_id=remote_node.node_id)
 
-    def predecessor(self) -> Dict:
+    def predecessor(self) -> Optional[str]:
         predecessor = self._make_request(PREDECESSOR)
         if "node_id" in predecessor:
             return predecessor["node_id"]

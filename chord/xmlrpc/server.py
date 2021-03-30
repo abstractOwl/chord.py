@@ -4,7 +4,7 @@ import socketserver
 import sys
 import threading
 import time
-from typing import Dict
+from typing import Tuple
 from xmlrpc.server import SimpleXMLRPCServer
 
 from chord.exceptions import NodeFailureException
@@ -65,15 +65,15 @@ class ChordNodeHandler:
             ]
         }
 
-    def join(self, remote_node_id: Dict):
+    def join(self, remote_node_id: str):
         node = RemoteChordNode(TRANSPORT_FACTORY, remote_node_id)
         self._node.join(node)
 
-    def notify(self, remote_node_id: Dict):
+    def notify(self, remote_node_id: str):
         node = RemoteChordNode(TRANSPORT_FACTORY, remote_node_id)
         self._node.notify(node)
 
-    def find_successor(self, key: int) -> (str, int):
+    def find_successor(self, key: int) -> Tuple[str, int]:
         node, hops = self._node.find_successor(key)
         return node.node_id, hops
 
@@ -99,8 +99,7 @@ class ChordNodeHandler:
 
 # The default SimpleXMLRPCServer is single-threaded. This creates a threaded
 # XMLRPC server.
-class ThreadedXmlRpcServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
-    pass
+class ThreadedXmlRpcServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer): pass
 
 
 if __name__ == '__main__':
@@ -112,11 +111,11 @@ if __name__ == '__main__':
 
     hostname = args.hostname
     port = args.port
-    ring_size = args.ring_size
-    node_id = f"{hostname}:{port}"
+    self_ring_size = args.ring_size
+    self_node_id = f"{hostname}:{port}"
 
-    LOG.info("Running on %s with ring size %s...", node_id, ring_size)
-    CHORD_NODE = ChordNodeHandler(node_id, DictChordStorage(), ring_size)
+    LOG.info("Running on %s with ring size %s...", self_node_id, self_ring_size)
+    CHORD_NODE = ChordNodeHandler(self_node_id, DictChordStorage(), self_ring_size)
 
     schedule_maintenance_tasks()
 

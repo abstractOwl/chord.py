@@ -3,16 +3,15 @@ from math import ceil
 from random import choice, choices
 from time import sleep
 from threading import Thread
-from typing import Dict
+from typing import Dict, Tuple, Union
 from uuid import uuid4
 
 from chord.exceptions import NodeFailureException
 from chord.node import ChordNode, RemoteChordNode
-from chord.storage import DictChordStorage
 
 
-nodes = {}
-iterations = 10000
+nodes: Dict[str, ChordNode] = {}
+ITERATIONS: int = 10000
 
 
 def main():
@@ -59,7 +58,7 @@ def main():
     # Make random find_successor calls, recording hops
     print("Running first simulation")
     hops_list = []
-    for i in range(iterations):
+    for i in range(ITERATIONS):
         _, hops = nodes[choice(joined_list)].find_successor(uuid4().hex)
         hops_list.append(hops)
 
@@ -71,7 +70,7 @@ def main():
     # recording hops
     print("Running simulation with random joins and failures")
     hops_list = []
-    for i in range(iterations):
+    for i in range(ITERATIONS):
         _, hops = nodes[choice(joined_list)].find_successor(uuid4().hex)
         hops_list.append(hops)
 
@@ -105,7 +104,7 @@ class LocalChordTransport:
         self.node_id = node_id
         self._transport_factory = transport_factory
 
-    def node(self) -> Dict:
+    def node(self) -> RemoteChordNode:
         node = nodes[self.node_id].node()
         node_id = node.node_id if node is not None else None
         return RemoteChordNode(self._transport_factory, node_id)
@@ -113,7 +112,7 @@ class LocalChordTransport:
     def create(self):
         nodes[self.node_id].create()
 
-    def find_successor(self, key: int) -> (Dict, int):
+    def find_successor(self, key: int) -> Tuple[str, int]:
         node, hops = nodes[self.node_id].find_successor(key)
         node_id = node.node_id if node is not None else None
         return node_id, hops
@@ -137,7 +136,7 @@ class LocalChordTransport:
         )
         return result
 
-    def get(self, key: str) -> str:
+    def get(self, key: str) -> Dict[str, str]:
         return nodes[self.node_id].get(key)
 
     def put(self, key: str, value: str, no_redirect: bool=False):
@@ -163,7 +162,7 @@ class DeadChordNode(RemoteChordNode):
     def create(self):
         raise NodeFailureException()
 
-    def find_successor(self, key: int) -> ("ChordNode", int):
+    def find_successor(self, key: Union[int, str]) -> Tuple[ChordNode, int]:
         raise NodeFailureException()
 
     def join(self, remote_node: "ChordNode"):
@@ -176,10 +175,14 @@ class DeadChordNode(RemoteChordNode):
     def predecessor(self) -> "ChordNode":
         raise NodeFailureException()
 
+    @predecessor.setter
+    def predecessor(self, value):
+        raise NotImplementedError
+
     def shutdown(self) -> Dict:
         raise NotImplementedError
 
-    def get(self, key: str) -> str:
+    def get(self, key: str) -> Dict[str, str]:
         raise NotImplementedError
 
     def put(self, key: str, value: str, no_redirect: bool=False):
@@ -197,10 +200,6 @@ class DeadChordNode(RemoteChordNode):
     def closest_preceding_node(self, key: int) -> "ChordNode":
         raise NotImplementedError
 
-    @predecessor.setter
-    def predecessor(self, value):
-        raise NotImplementedError
-
     @property
     def successor(self):
         raise NodeFailureException()
@@ -214,8 +213,8 @@ def avg(in_list):
     return sum(in_list) / len(in_list)
 
 
-def percentile(percentile, in_list):
-    return in_list[ceil(len(in_list) * percentile / 100) - 1]
+def percentile(pct, in_list):
+    return in_list[ceil(len(in_list) * pct / 100) - 1]
 
 
 def print_stats(in_list):

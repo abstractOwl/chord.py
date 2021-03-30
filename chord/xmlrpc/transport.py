@@ -1,8 +1,8 @@
-from typing import Dict
+from typing import Dict, Tuple
 from xmlrpc.client import Fault, ServerProxy
 
 from chord.exceptions import NodeFailureException
-from chord.node import RemoteChordNode
+from chord.node import ChordNode, RemoteChordNode
 
 
 def translate_faults(fn):
@@ -35,7 +35,7 @@ class XmlRpcChordTransport:
         self._get_client().create()
 
     @translate_faults
-    def find_successor(self, key: int) -> (str, int):
+    def find_successor(self, key: int) -> Tuple[str, int]:
         return self._get_client().find_successor(key)
 
     @translate_faults

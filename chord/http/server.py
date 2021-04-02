@@ -29,7 +29,7 @@ LOG.setLevel(logging.INFO)
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE.successor:
+            if CHORD_NODE.get_successor():
                 LOG.info("Running maintenance tasks...")
 
                 try:
@@ -97,7 +97,7 @@ def notify():
 @APP.route(PREDECESSOR)
 def predecessor():
     LOG.info("%s: Getting predecessor", PREDECESSOR)
-    return jsonify(marshal(CHORD_NODE.predecessor))
+    return jsonify(marshal(CHORD_NODE.get_predecessor()))
 
 
 @APP.route(SHUTDOWN)

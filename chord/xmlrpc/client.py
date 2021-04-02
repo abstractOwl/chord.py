@@ -66,7 +66,7 @@ if __name__ == '__main__':
         logger.info(node.notify(remote_node))
     elif args.predecessor:
         logger.info("Getting predecessor info from [%s]", node)
-        logger.info(node.predecessor)
+        logger.info(node.predecessor())
     elif args.shutdown:
         logger.info("Shutting node [%s] down gracefully", node)
         node.shutdown()

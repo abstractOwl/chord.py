@@ -9,7 +9,7 @@ def translate_faults(fn):
     def _inner(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except (Fault, ConnectionError) as ex:
+        except (ConnectionError) as ex:
             raise NodeFailureException() from ex
     return _inner
 

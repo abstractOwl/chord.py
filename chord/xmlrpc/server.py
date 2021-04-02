@@ -24,7 +24,7 @@ LOG.setLevel(logging.DEBUG)
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE._node.successor:
+            if CHORD_NODE._node.get_successor():
                 LOG.info("Running maintenance tasks...")
 
                 try:
@@ -78,10 +78,7 @@ class ChordNodeHandler:
         return node.node_id, hops
 
     def predecessor(self):
-        # Changing this to a method because xmlrpc has trouble marshalling
-        # @property methods. This will only be called by XmlRpcChordTransport
-        # so changed that code to call predecessor as a function.
-        node = self._node.predecessor
+        node = self._node.get_predecessor()
         if node is None:
             return None
         return node.node_id

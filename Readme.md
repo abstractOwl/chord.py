@@ -53,9 +53,8 @@ $ python -m chord.http.client 127.0.0.1 4568 --shutdown
 ```
 
 ## TODOs
-* Implement successor list
-* Implement multiple buckets per node to increase likelihood of a more even
-  distribution of keys
+* Dockerize application
+* Figure out configuration
 
 ## Resources
 * [Chord: A Scalable Peer-to-peer Lookup Protocol for Internet Applications](https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf)

@@ -28,6 +28,8 @@ if __name__ == '__main__':
             help="Notifies a node that a node might be its predecessor")
     command_group.add_argument("--predecessor", action='store_true',
             help="Returns the predecessor node")
+    command_group.add_argument("--successor_list", action='store_true',
+            help="Returns the node's successor list")
     command_group.add_argument("--shutdown", action='store_true',
             help="Shuts the node down gracefully")
     command_group.add_argument("--get", type=str,
@@ -66,7 +68,10 @@ if __name__ == '__main__':
         logger.info(node.notify(remote_node))
     elif args.predecessor:
         logger.info("Getting predecessor info from [%s]", node)
-        logger.info(node.predecessor())
+        logger.info(node.get_predecessor())
+    elif args.successor_list:
+        logger.info("Getting successor list from [%s]", node)
+        logger.info(node.get_successor_list())
     elif args.shutdown:
         logger.info("Shutting node [%s] down gracefully", node)
         node.shutdown()

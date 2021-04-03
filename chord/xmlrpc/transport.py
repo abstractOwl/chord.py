@@ -1,14 +1,14 @@
 from typing import Dict, Tuple
-from xmlrpc.client import Fault, ServerProxy
+from xmlrpc.client import ServerProxy
 
 from chord.exceptions import NodeFailureException
-from chord.node import ChordNode, RemoteChordNode
+from chord.node import ChordNode
 
 
-def translate_faults(fn):
+def translate_faults(func):
     def _inner(*args, **kwargs):
         try:
-            return fn(*args, **kwargs)
+            return func(*args, **kwargs)
         except (ConnectionError) as ex:
             raise NodeFailureException() from ex
     return _inner
@@ -39,16 +39,20 @@ class XmlRpcChordTransport:
         return self._get_client().find_successor(key)
 
     @translate_faults
-    def join(self, remote_node: "ChordNode"):
+    def join(self, remote_node: ChordNode):
         self._get_client().join(remote_node.node_id)
 
     @translate_faults
-    def notify(self, remote_node: "ChordNode"):
+    def notify(self, remote_node: ChordNode):
         self._get_client().notify(remote_node.node_id)
 
     @translate_faults
-    def predecessor(self) -> Dict:
-        return self._get_client().predecessor()
+    def get_predecessor(self) -> Dict:
+        return self._get_client().get_predecessor()
+
+    @translate_faults
+    def get_successor_list(self) -> Dict:
+        return self._get_client().get_successor_list()
 
     @translate_faults
     def shutdown(self) -> Dict:

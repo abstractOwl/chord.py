@@ -3,57 +3,62 @@ from math import ceil
 from random import choice, choices
 from time import sleep
 from threading import Thread
-from typing import Dict, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from chord.exceptions import NodeFailureException
 from chord.node import ChordNode, RemoteChordNode
+from chord.storage import DictChordStorage
 
 
-nodes: Dict[str, ChordNode] = {}
+nodes: Dict[str, Optional[ChordNode]] = {}
 ITERATIONS: int = 10000
+joined_list: List[str] = []
 
 
 def main():
     parser = argparse.ArgumentParser(description="Simulates a Chord ring.")
     parser.add_argument("nodes", type=int, help="Number of nodes to simulate.")
+    parser.add_argument("successor_list_size", type=int, help="Successor list size")
     parser.add_argument("ring_size", type=int, help="Chord ring size.")
 
     args = parser.parse_args()
+    successor_list_size = args.successor_list_size
     ring_size = args.ring_size
 
     transport_factory = LocalChordTransportFactory()
-    joined_list = []
 
     # Start maintenance thread
-    running = True
     def run_maintenance_tasks():
-        while running:
+        while True:
             for node_id in joined_list:
                 node = nodes[node_id]
-                if node.is_alive():
-                    node.fix_fingers()
-                    node.stabilize()
-                    node.check_predecessor()
+                if node.get_successor_list():
+                    try:
+                        node.fix_fingers()
+                        node.stabilize()
+                        node.check_predecessor()
+                    except NodeFailureException:
+                        pass
 
-            sleep(0.1)
-    Thread(target=run_maintenance_tasks).start()
+            sleep(0.01)
+    Thread(target=run_maintenance_tasks, daemon=True).start()
 
     # Init nodes
     print("Initiating node ring...")
-    joined_list.append(create_node(transport_factory, ring_size))
+    create_node(transport_factory, successor_list_size, ring_size)
     for _ in range(args.nodes - 1):
-        node_id = create_node(
+        create_node(
                 transport_factory,
+                successor_list_size,
                 ring_size,
                 choice(joined_list)
         )
-        joined_list.append(node_id)
     print("=> Done")
 
     # Wait for ring to stabilize
-    print("Waiting 30 seconds for ring to stabilize...")
-    sleep(30)
+    print("Waiting 10 seconds for ring to stabilize...")
+    sleep(10)
 
     # Make random find_successor calls, recording hops
     print("Running first simulation")
@@ -70,33 +75,34 @@ def main():
     # recording hops
     print("Running simulation with random joins and failures")
     hops_list = []
+    failed = 0
     for i in range(ITERATIONS):
-        _, hops = nodes[choice(joined_list)].find_successor(uuid4().hex)
-        hops_list.append(hops)
+        try:
+            _, hops = nodes[choice(joined_list)].find_successor(uuid4().hex)
+            hops_list.append(hops)
+        except NodeFailureException:
+            failed += 1
 
-        # TODO: Enable after successor lists are implemented
-        # if choices([True, False], weights=[5, 95]):
-        #     # choice(list(nodes.values())).shutdown()
-        #     node_id = choice(joined_list)
-        #     joined_list.remove(node_id)
-        #     nodes[node_id] = DeadChordNode(transport_factory, node_id)
+        # TODO Debug node shutdown
+        #if choices([True, False], weights=[1, 999]):
+        #    node_id = choice(joined_list)
+        #    print("Shutting down ", node_id)
+        #    nodes[node_id].shutdown()
+        #    sleep(0.05)
 
         if choices([True, False], weights=[5, 95]):
-            joined_list.append(
-                    create_node(
-                        transport_factory,
-                        ring_size,
-                        choice(list(nodes.keys()))
-                    )
+            create_node(
+                transport_factory,
+                successor_list_size,
+                ring_size,
+                choice(joined_list)
             )
 
         if i % 1000 == 0:
             print("=> Completed %d lookups so far" % i)
 
     print_stats(hops_list)
-
-
-    running = False
+    print("Failed calls", failed)
 
 
 class LocalChordTransport:
@@ -104,109 +110,54 @@ class LocalChordTransport:
         self.node_id = node_id
         self._transport_factory = transport_factory
 
+    def _get_node(self):
+        if self.node_id in joined_list and nodes[self.node_id]:
+            return nodes[self.node_id]
+        raise NodeFailureException(self.node_id)
+
     def node(self) -> RemoteChordNode:
-        node = nodes[self.node_id].node()
+        node = self._get_node().node()
         node_id = node.node_id if node is not None else None
         return RemoteChordNode(self._transport_factory, node_id)
 
     def create(self):
-        nodes[self.node_id].create()
+        self._get_node().create()
 
     def find_successor(self, key: int) -> Tuple[str, int]:
-        node, hops = nodes[self.node_id].find_successor(key)
+        node, hops = self._get_node().find_successor(key)
         node_id = node.node_id if node is not None else None
         return node_id, hops
 
     def join(self, remote_node: "ChordNode"):
-        nodes[self.node_id].join(remote_node)
+        self._get_node().join(remote_node)
 
     def notify(self, remote_node: "ChordNode"):
-        nodes[self.node_id].notify(remote_node)
+        self._get_node().notify(remote_node)
 
-    def predecessor(self) -> Dict:
-        node = nodes[self.node_id].predecessor
+    def get_predecessor(self) -> Dict:
+        node = self._get_node().get_predecessor()
         node_id = node.node_id if node is not None else None
         return node_id
 
+    def get_successor_list(self) -> List["ChordNode"]:
+        return [node.node_id for node in self._get_node().get_successor_list()]
+
     def shutdown(self) -> Dict:
-        result = nodes[self.node_id].shutdown()
-        nodes[self.node_id] = DeadChordNode(
-                self._transport_factory,
-                self.node_id
-        )
+        result = self._get_node().shutdown()
+        nodes[self.node_id] = None
+        joined_list.remove(self.node_id)
         return result
 
     def get(self, key: str) -> Dict[str, str]:
-        return nodes[self.node_id].get(key)
+        return self._get_node().get(key)
 
     def put(self, key: str, value: str, no_redirect: bool=False):
-        return nodes[self.node_id].put(key, value, no_redirect)
+        return self._get_node().put(key, value, no_redirect)
 
 
 class LocalChordTransportFactory:
-    def new_transport(self, node_id):
+    def new_transport(self, node_id: str):
         return LocalChordTransport(self, node_id)
-
-
-class DeadChordNode(RemoteChordNode):
-    def __init__(self, transport_factory, node_id):
-        super().__init__(transport_factory, node_id)
-        self.node_id = node_id
-
-    def node(self):
-        raise NodeFailureException()
-
-    def is_alive(self) -> bool:
-        return False
-
-    def create(self):
-        raise NodeFailureException()
-
-    def find_successor(self, key: Union[int, str]) -> Tuple[ChordNode, int]:
-        raise NodeFailureException()
-
-    def join(self, remote_node: "ChordNode"):
-        raise NodeFailureException()
-
-    def notify(self, remote_node: "ChordNode"):
-        raise NodeFailureException()
-
-    @property
-    def predecessor(self) -> "ChordNode":
-        raise NodeFailureException()
-
-    @predecessor.setter
-    def predecessor(self, value):
-        raise NotImplementedError
-
-    def shutdown(self) -> Dict:
-        raise NotImplementedError
-
-    def get(self, key: str) -> Dict[str, str]:
-        raise NotImplementedError
-
-    def put(self, key: str, value: str, no_redirect: bool=False):
-        raise NotImplementedError
-
-    def stabilize(self):
-        raise NotImplementedError
-
-    def fix_fingers(self):
-        raise NotImplementedError
-
-    def check_predecessor(self):
-        raise NotImplementedError
-
-    def closest_preceding_node(self, key: int) -> "ChordNode":
-        raise NotImplementedError
-
-    @property
-    def successor(self):
-        raise NodeFailureException()
-
-    @successor.setter
-    def successor(self, value):
-        raise NotImplementedError
 
 
 def avg(in_list):
@@ -226,10 +177,11 @@ def print_stats(in_list):
     print("p99.9", percentile(99.9, sorted_in_list))
 
 
-def create_node(transport_factory, ring_size, join_node_id=None):
+def create_node(transport_factory, successor_list_size, ring_size, join_node_id=None):
     node_id = uuid4().hex
-    node = ChordNode(node_id, None, ring_size)
+    node = ChordNode(node_id, DictChordStorage(), successor_list_size, ring_size)
     nodes[node_id] = node
+    joined_list.append(node_id)
 
     if join_node_id:
         node.join(RemoteChordNode(transport_factory, join_node_id))

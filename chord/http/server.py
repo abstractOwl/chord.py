@@ -8,7 +8,8 @@ from flask.logging import create_logger
 
 from chord.exceptions import NodeFailureException
 from chord.http.constants import (
-        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
+        GET, PUT
 )
 from chord.http.marshaller import marshal
 from chord.http.transport import HttpChordTransportFactory
@@ -29,7 +30,7 @@ LOG.setLevel(logging.INFO)
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE.get_successor():
+            if CHORD_NODE.get_successor_list():
                 LOG.info("Running maintenance tasks...")
 
                 try:
@@ -94,10 +95,16 @@ def notify():
     return jsonify({})
 
 
-@APP.route(PREDECESSOR)
-def predecessor():
-    LOG.info("%s: Getting predecessor", PREDECESSOR)
+@APP.route(GET_PREDECESSOR)
+def get_predecessor():
+    LOG.info("%s: Getting predecessor", GET_PREDECESSOR)
     return jsonify(marshal(CHORD_NODE.get_predecessor()))
+
+
+@APP.route(GET_SUCCESSOR_LIST)
+def get_successor_list():
+    LOG.info("%s: Getting successor list", GET_SUCCESSOR_LIST)
+    return jsonify([successor.node_id for successor in CHORD_NODE.get_successor_list()])
 
 
 @APP.route(SHUTDOWN)
@@ -127,14 +134,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Runs a Chord server.")
     parser.add_argument("hostname", type=str, help="The server hostname.")
     parser.add_argument("port", type=int, help="The server port")
+    parser.add_argument("successor_list_size", type=int, help="The successor list size")
     parser.add_argument("ring_size", type=int, help="The server port")
     args = parser.parse_args()
 
     hostname = args.hostname
     port = args.port
+    successor_list_size = args.successor_list_size
     ring_size = args.ring_size
     node_id = f"{hostname}:{port}"
 
-    LOG.info("Running on %s with ring size %s...", node_id, ring_size)
-    CHORD_NODE = ChordNode(node_id, DictChordStorage(), ring_size)
+    LOG.info("Running on %s with successor list size %s and ring size %s...",
+            node_id, successor_list_size, ring_size)
+    CHORD_NODE = ChordNode(node_id, DictChordStorage(), successor_list_size, ring_size)
     APP.run(hostname, port)

@@ -1,10 +1,11 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
 from chord.exceptions import NodeFailureException
 from chord.http.constants import (
-        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, PREDECESSOR, SHUTDOWN, GET, PUT, TIMEOUT
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
+        GET, PUT, TIMEOUT
 )
 from chord.node import ChordNode
 
@@ -13,7 +14,7 @@ class HttpChordTransport:
     """
     HTTP transport implementation for Chord. node_id is {hostname}:{port}.
     """
-    def __init__(self, node_id: int):
+    def __init__(self, node_id: str):
         self.node_id = node_id
 
     def _make_request(self, command: str, **params):
@@ -43,11 +44,14 @@ class HttpChordTransport:
     def notify(self, remote_node: ChordNode):
         self._make_request(NOTIFY, node_id=remote_node.node_id)
 
-    def predecessor(self) -> Optional[str]:
-        predecessor = self._make_request(PREDECESSOR)
+    def get_predecessor(self) -> Optional[str]:
+        predecessor = self._make_request(GET_PREDECESSOR)
         if "node_id" in predecessor:
             return predecessor["node_id"]
         return None
+
+    def get_successor_list(self) -> List[str]:
+        return self._make_request(GET_SUCCESSOR_LIST)
 
     def shutdown(self) -> Dict:
         return self._make_request(SHUTDOWN)
@@ -60,5 +64,5 @@ class HttpChordTransport:
 
 
 class HttpChordTransportFactory:
-    def new_transport(self, node_id: int):
+    def new_transport(self, node_id: str):
         return HttpChordTransport(node_id)

@@ -24,7 +24,7 @@ LOG.setLevel(logging.DEBUG)
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE._node.get_successor():
+            if CHORD_NODE._node.get_successor_list():
                 LOG.info("Running maintenance tasks...")
 
                 try:
@@ -50,8 +50,8 @@ def schedule_maintenance_tasks():
 # Needed since XMLRPC marshals object instances to Dict when sending but
 # doesn't unmarshal them when receiving.
 class ChordNodeHandler:
-    def __init__(self, node_id, storage, ring_size):
-        self._node = ChordNode(node_id, storage, ring_size)
+    def __init__(self, node_id, storage, successor_list_size, ring_size):
+        self._node = ChordNode(node_id, storage, successor_list_size, ring_size)
 
     def create(self):
         self._node.create()
@@ -77,11 +77,15 @@ class ChordNodeHandler:
         node, hops = self._node.find_successor(key)
         return node.node_id, hops
 
-    def predecessor(self):
+    def get_predecessor(self):
         node = self._node.get_predecessor()
         if node is None:
             return None
         return node.node_id
+
+    def get_successor_list(self):
+        successor_list = self._node.get_successor_list()
+        return [node.node_id for node in successor_list]
 
     def shutdown(self):
         self._node.shutdown()
@@ -103,16 +107,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Runs a Chord server.")
     parser.add_argument("hostname", type=str, help="The server hostname.")
     parser.add_argument("port", type=int, help="The server port")
-    parser.add_argument("ring_size", type=int, help="The server port")
+    parser.add_argument("successor_list_size", type=int, help="The successor list size")
+    parser.add_argument("ring_size", type=int, help="The Chord ring size")
     args = parser.parse_args()
 
     hostname = args.hostname
     port = args.port
+    self_successor_list_size = args.successor_list_size
     self_ring_size = args.ring_size
     self_node_id = f"{hostname}:{port}"
 
-    LOG.info("Running on %s with ring size %s...", self_node_id, self_ring_size)
-    CHORD_NODE = ChordNodeHandler(self_node_id, DictChordStorage(), self_ring_size)
+    LOG.info("Running on %s with successor list size %s and ring size %s...",
+            self_node_id, self_successor_list_size, self_ring_size)
+    CHORD_NODE = ChordNodeHandler(
+            self_node_id, DictChordStorage(), self_successor_list_size, self_ring_size
+    )
 
     schedule_maintenance_tasks()
 

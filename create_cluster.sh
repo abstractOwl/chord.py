@@ -6,9 +6,9 @@
 
 function teardown() {
     echo "Running cleanup..."
-    docker container stop chordpy_node1 chordpy_node2 chordpy_node3 > /dev/null
-    docker container rm chordpy_node1 chordpy_node2 chordpy_node3 > /dev/null
-    docker network rm chordnet > /dev/null
+    docker container stop chordpy_node1 chordpy_node2 chordpy_node3 > /dev/null 2>&1
+    docker container rm chordpy_node1 chordpy_node2 chordpy_node3 > /dev/null 2>&1
+    docker network rm chordnet > /dev/null 2>&1
 }
 
 # Tear down any remaining resources in case of unclean shutdown

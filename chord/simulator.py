@@ -77,6 +77,10 @@ def main():
             print("=> Completed %d lookups so far" % i)
     print_stats(hops_list)
 
+    print()
+    input("Press enter to continue.")
+    print()
+
     # Make random find_successor calls, while adding/killing nodes randomly,
     # recording hops
     print("Running simulation with random joins and failures")
@@ -91,7 +95,7 @@ def main():
         except NodeFailureException:
             failed += 1
 
-        if choices([True, False], weights=[1, 99])[0]:
+        if choices([True, False], weights=[5, 95])[0]:
             node_id = choice(joined_list)
             print("Shutting down ", node_id)
             RemoteChordNode(transport_factory, node_id).shutdown(ShutdownRequest())

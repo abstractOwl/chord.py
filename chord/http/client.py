@@ -46,7 +46,7 @@ if __name__ == '__main__':
     node_id = f"{hostname}:{port}"
 
 
-    transport_factory = HttpChordTransportFactory()
+    transport_factory = HttpChordTransportFactory(5)
     node = RemoteChordNode(transport_factory, node_id)
 
     if args.node:

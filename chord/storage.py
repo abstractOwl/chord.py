@@ -7,6 +7,9 @@ class DictChordStorage:
     def get(self, key: str) -> str:
         return self.storage[key]
 
+    def has(self, key: str) -> bool:
+        return key in self.storage
+
     def list(self) -> List[str]:
         return list(self.storage.keys())
 

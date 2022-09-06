@@ -1,6 +1,7 @@
 import argparse
 import logging
 
+from chord.model import *
 from chord.node import RemoteChordNode
 from chord.xmlrpc.transport import XmlRpcChordTransportFactory
 
@@ -50,37 +51,37 @@ if __name__ == '__main__':
 
     if args.node:
         logger.info("Getting node info from [%s]", node)
-        logger.info(node.node())
+        logger.info(node.node(NodeRequest()))
     elif args.create:
         logger.info("Creating node ring at [%s]", node)
-        logger.info(node.create())
+        logger.info(node.create(CreateRequest()))
     elif args.find_successor:
         key = args.find_successor
         logger.info("Finding successor for [%s] starting at [%s]", key, node)
-        logger.info(node.find_successor(args.find_successor))
+        logger.info(node.find_successor(FindSuccessorRequest(args.find_successor)))
     elif args.join:
         remote_node = RemoteChordNode(transport_factory, args.join)
         logger.info("Joining [%s] to node [%s]", node, remote_node)
-        logger.info(node.join(remote_node))
+        logger.info(node.join(JoinRequest(remote_node)))
     elif args.notify:
         remote_node = RemoteChordNode(transport_factory, args.join)
         logger.info("Notifying [%s] of node [%s]", node, remote_node)
-        logger.info(node.notify(remote_node))
+        logger.info(node.notify(NotifyRequest(remote_node)))
     elif args.predecessor:
         logger.info("Getting predecessor info from [%s]", node)
-        logger.info(node.get_predecessor())
+        logger.info(node.get_predecessor(GetPredecessorRequest()))
     elif args.successor_list:
         logger.info("Getting successor list from [%s]", node)
-        logger.info(node.get_successor_list())
+        logger.info(node.get_successor_list(GetSuccessorListRequest()))
     elif args.shutdown:
         logger.info("Shutting node [%s] down gracefully", node)
-        node.shutdown()
+        logger.info(node.shutdown(ShutdownRequest()))
     elif args.get:
         logger.info("Getting key [%s]", args.get)
-        logger.info(node.get(args.get))
+        logger.info(node.get(GetKeyRequest(args.get)))
     elif args.put:
         key, value = args.put.split("=", 1)
         logger.info("Putting key [%s] = value [%s]", key, value)
-        logger.info(node.put(key, value))
+        logger.info(node.put(PutKeyRequest(key, value)))
     else:
         logger.error("Must specify a command")

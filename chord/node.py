@@ -3,11 +3,15 @@ Implements the Chord node.
 
 See https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 """
+from __future__ import annotations
 from hashlib import sha256
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 import logging
 
+from chord.constants import *
 from chord.exceptions import NodeFailureException
+from chord.model import *
+from chord.storage import DictChordStorage
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 class ChordNode:
     """ Base Chord DHT Node implementation. """
-    def __init__(self, node_id, storage, successor_list_size, ring_size):
+    def __init__(self, node_id: str, storage: DictChordStorage, successor_list_size: int, ring_size: int):
+        # TODO: Split options into protocol, config, storage_handler
         self.node_id = node_id
         self.predecessor = None
         self._storage = storage
@@ -72,25 +77,27 @@ class ChordNode:
                 self._bucketize(higher_node.node_id)
         )
 
-    def create(self):
+    def create(self, request: CreateRequest) -> CreateResponse:
         """ Creates a Chord ring. """
-        if self.get_successor_list():
+        if self.get_successor_list(GetSuccessorListRequest()).successor_list:
             raise RuntimeError("Node already initialized")
         self.successor_list = [self] * self._successor_list_size
+        return CreateResponse()
 
-    def join(self, remote_node: "ChordNode"):
+    def join(self, request: JoinRequest) -> JoinResponse:
         """
         Joins a Chord ring.
         :param remote_node: The remote ChordNode to connect to
         """
-        if self.get_successor_list():
+        if self.get_successor_list(GetSuccessorListRequest()).successor_list:
             raise RuntimeError("Node already initialized")
-        successor, _ = remote_node.find_successor(self._bucketize(self.node_id))
-        self.successor_list = successor.get_successor_list()
+        successor = request.remote_node.find_successor(FindSuccessorRequest(self._bucketize(self.node_id))).node
+        self.successor_list = successor.get_successor_list(GetSuccessorListRequest()).successor_list
+        return JoinResponse()
 
-    def node(self) -> "ChordNode":
+    def node(self, request: NodeRequest) -> NodeResponse:
         """ Returns this ChordNode. Essentially used as a ping operation. """
-        return self
+        return NodeResponse(self)
 
     def is_alive(self) -> bool:
         """ Return True if this node is alive. """
@@ -101,16 +108,16 @@ class ChordNode:
         Verifies this node's successor and tells the successor about this node.
         """
         try:
-            current_successor = self.get_successor()
+            current_successor = self._get_successor()
 
-            possible_successor = current_successor.get_predecessor()
-            successor_successor_list = current_successor.get_successor_list()
+            possible_successor = current_successor.get_predecessor(GetPredecessorRequest()).node
+            successor_successor_list = current_successor.get_successor_list(GetSuccessorListRequest()).successor_list
 
             self.successor_list = [current_successor, *successor_successor_list[:-1]]
             if (possible_successor
                     and self._between_nodes(possible_successor, self, current_successor)):
                 try:
-                    new_successor_list = possible_successor.get_successor_list()
+                    new_successor_list = possible_successor.get_successor_list(GetSuccessorListRequest()).successor_list
                     self.successor_list = [possible_successor, *new_successor_list[:-1]]
                 except NodeFailureException:
                     # possible_successor is dead, no change
@@ -120,16 +127,18 @@ class ChordNode:
             # Remove dead successor
             self.successor_list = [*self.successor_list[1:], self]
 
-        self.get_successor().notify(self)
+        self._get_successor().notify(NotifyRequest(self))
 
-    def notify(self, remote_node):
+    def notify(self, request: NotifyRequest) -> NotifyResponse:
         """
         Notify this node that a remote node thinks this is its predecessor.
         """
-        if (self.get_predecessor() is None
-                or self._between_nodes(remote_node, self.get_predecessor(), self)
-                or not self.get_predecessor().is_alive()):
-            self.set_predecessor(remote_node)
+        predecessor = self.get_predecessor(GetPredecessorRequest()).node
+        if (predecessor is None
+                or self._between_nodes(request.remote_node, predecessor, self)
+                or not predecessor.is_alive()):
+            self.set_predecessor(request.remote_node)
+        return NotifyResponse()
 
     def fix_fingers(self):
         """ Refreshes finger table entries. """
@@ -137,42 +146,42 @@ class ChordNode:
         finger_bucket += 2 ** self._next
         finger_bucket %= 2 ** self.ring_size
 
-        self.fingers[self._next], _ = self.find_successor(finger_bucket)
+        self.fingers[self._next] = self.find_successor(FindSuccessorRequest(finger_bucket)).node
 
         self._next = (self._next + 1) % self.ring_size
 
     def check_predecessor(self):
         """ Check that the predecessor is still alive. """
-        if self.get_predecessor() and not self.get_predecessor().is_alive():
+        predecessor = self.get_predecessor(GetPredecessorRequest()).node
+        if predecessor and not predecessor.is_alive():
             self.set_predecessor(None)
 
-    def find_successor(self, key: Union[int, str]) -> Tuple["ChordNode", int]:
+    def find_successor(self, request: FindSuccessorRequest) -> FindSuccessorResponse:
         """
         Returns the successor node for a given key or bucket.
         :param key: A string key or numeric bucket
         """
-        key_bucket = self._bucketize(key) if isinstance(key, str) else key
+        key_bucket = request.key if isinstance(request.key, int) else self._bucketize(str(request.key))
         key_bucket %= 2 ** self.ring_size
 
-        current_successor = self.get_successor()
+        current_successor = self._get_successor()
         if (self._between(
                 key_bucket,
                 self._bucketize(self.node_id),
                 self._bucketize(current_successor.node_id)
-        ) or self._bucketize(current_successor.node_id) == key):
-            try:
-                current_successor.node()
-                return current_successor, 1
-            except NodeFailureException:
-                return self, 1
+        ) or self._bucketize(current_successor.node_id) == request.key):
+            if current_successor.is_alive():
+                return FindSuccessorResponse(current_successor, 1)
+            else:
+                return FindSuccessorResponse(self, 1)
 
         for closest in self.closest_preceding_nodes(key_bucket):
             if closest == self:
-                return self, 1
+                return FindSuccessorResponse(self, 1)
 
             try:
-                target, hops = closest.find_successor(key_bucket)
-                return target, hops + 1
+                response = closest.find_successor(FindSuccessorRequest(key_bucket))
+                return FindSuccessorResponse(response.node, response.hops + 1)
             except NodeFailureException:
                 pass  # Dead node, try the next one!
 
@@ -199,56 +208,56 @@ class ChordNode:
 
         yield self
 
-    def shutdown(self) -> Dict:
+    def shutdown(self, request: ShutdownRequest) -> ShutdownResponse:
         """ Shuts down the node gracefully. """
-        for successor in self.get_successor_list():
+        successor_list = self.get_successor_list(GetSuccessorListRequest()).successor_list
+        for successor in successor_list:
             try:
                 self._is_shutdown = True
                 self.set_predecessor(successor)
-                successor.notify(self.get_predecessor())
+                successor.notify(NotifyRequest(self.get_predecessor(GetPredecessorRequest()).node))
 
                 for key in self._storage.list():
-                    successor.put(key, self._storage.get(key), True)
+                    successor.put(PutKeyRequest(key, self._storage.get(key), True))
 
-                return {}
+                return ShutdownResponse()
 
             except NodeFailureException:
                 pass
 
         raise RuntimeError("Didn't find any alive nodes to handoff to!")
 
-    def get_successor(self) -> "ChordNode":
+    def _get_successor(self) -> ChordNode:
         """ Return this node's successor. """
         return self.successor_list[0]
 
-    def get_successor_list(self) -> List["ChordNode"]:
+    def get_successor_list(self, request: GetSuccessorListRequest) -> GetSuccessorListResponse:
         """ Returns this node's successor list. """
-        return self.successor_list
+        return GetSuccessorListResponse(self.successor_list)
 
     # Not using @properties for these since RPC doesn't work well with them
-    def get_predecessor(self) -> Optional["ChordNode"]:
+    def get_predecessor(self, request: GetPredecessorRequest) -> GetPredecessorResponse:
         """ Returns the predecessor node. """
-        return self.predecessor
+        return GetPredecessorResponse(self.predecessor)
 
-    def set_predecessor(self, value):
+    def set_predecessor(self, value: ChordNode):
         """ Sets this node's predecessor. """
         self.predecessor = value
 
-    def get(self, key: str) -> Dict:
+    def get(self, request: GetKeyRequest) -> GetKeyResponse:
         """
         Returns the value for a key from Chord storage.
         :param key: The string key to retrieve a value for
         """
-        node, hops = self.find_successor(key)
-        if node == self:
-            return {
-                "hops": hops,
-                "storage_node": self.node_id,
-                "value": self._storage.get(key)
-            }
-        return node.get(key)
+        response = self.find_successor(FindSuccessorRequest(request.key))
+        if response.node == self:
+            if self._storage.has(request.key):
+                return GetKeyResponse(self, response.hops, self._storage.get(request.key), True)
+            else:
+                return GetKeyResponse(self, response.hops, None, False)
+        return response.node.get(request)
 
-    def put(self, key: str, value: str, no_redirect: bool=False) -> Dict:
+    def put(self, request: PutKeyRequest) -> PutKeyResponse:
         """
         Puts a value into Chord storage.
         :param key: The string key to store
@@ -257,18 +266,15 @@ class ChordNode:
                             directly to the storage of this node, rather
                             than to the key's successor.
         """
-        node, hops = self.find_successor(key)
-        if node == self or no_redirect:
-            self._storage.put(key, value)
-            return {
-                "hops": hops,
-                "storage_node": self.node_id
-            }
-        return node.put(key, value)
+        response = self.find_successor(FindSuccessorRequest(request.key))
+        if response.node == self or request.no_redirect:
+            self._storage.put(request.key, request.value)
+            return PutKeyResponse(self, response.hops)
+        return response.node.put(request)
 
 
 class RemoteChordNode(ChordNode):
-    """ ChordNode adapter for remote operations. """
+    """ ChordNode proxy for remote operations. """
 
     def __init__(self, transport_factory, node_id: str):
         super().__init__(node_id, None, 0, 0)
@@ -278,50 +284,48 @@ class RemoteChordNode(ChordNode):
     def __repr__(self):
         return f"{__name__}({self.node_id})"
 
-    def node(self) -> "ChordNode":
-        return self._transport.node()
+    def node(self, request: NodeRequest) -> NodeResponse:
+        return self._transport.make_request(NODE, request, NodeResponse)
 
     def is_alive(self) -> bool:
         try:
-            self.node()
+            self.node(NodeRequest())
             return True
         except NodeFailureException:
             return False
 
-    def create(self):
-        self._transport.create()
+    def create(self, request: CreateRequest) -> CreateResponse:
+        return self._transport.make_request(CREATE, request, CreateResponse)
 
-    def find_successor(self, key: Union[int, str]) -> Tuple[ChordNode, int]:
-        node_id, hops = self._transport.find_successor(key)
-        return RemoteChordNode(self._transport_factory, node_id), hops
+    def find_successor(self, request: FindSuccessorRequest) -> FindSuccessorResponse:
+        return self._transport.make_request(FIND_SUCCESSOR, request, FindSuccessorResponse)
 
-    def join(self, remote_node: "ChordNode"):
-        self._transport.join(remote_node)
+    def join(self, request: JoinRequest) -> JoinResponse:
+        return self._transport.make_request(JOIN, request, JoinResponse)
 
-    def notify(self, remote_node: "ChordNode"):
-        self._transport.notify(remote_node)
+    def notify(self, request: NotifyRequest) -> NotifyResponse:
+        return self._transport.make_request(NOTIFY, request, NotifyResponse)
 
-    def get_predecessor(self) -> Optional["ChordNode"]:
-        node_id = self._transport.get_predecessor()
-        if node_id is None:
-            return None
-        return RemoteChordNode(self._transport_factory, node_id)
+    def get_predecessor(self, request: GetPredecessorRequest) -> GetPredecessorResponse:
+        return self._transport.make_request(GET_PREDECESSOR, request, GetPredecessorResponse)
 
-    def set_predecessor(self, value):
+    def set_predecessor(self, value: ChordNode):
         raise NotImplementedError
 
-    def get_successor_list(self):
-        return [RemoteChordNode(self._transport_factory, node_id)
-                for node_id in self._transport.get_successor_list()]
+    def _get_successor(self) -> ChordNode:
+        raise NotImplementedError
 
-    def shutdown(self) -> Dict:
-        return self._transport.shutdown()
+    def get_successor_list(self, request: GetSuccessorListRequest) -> GetSuccessorListResponse:
+        return self._transport.make_request(GET_SUCCESSOR_LIST, request, GetSuccessorListResponse)
 
-    def get(self, key: str) -> Dict[str, str]:
-        return self._transport.get(key)
+    def shutdown(self, request: ShutdownRequest) -> ShutdownResponse:
+        return self._transport.make_request(SHUTDOWN, request, ShutdownResponse)
 
-    def put(self, key: str, value: str, no_redirect: bool=False):
-        return self._transport.put(key, value, no_redirect=no_redirect)
+    def get(self, request: GetKeyRequest) -> GetKeyResponse:
+        return self._transport.make_request(GET_KEY, request, GetKeyResponse)
+
+    def put(self, request: PutKeyRequest) -> PutKeyResponse:
+        return self._transport.make_request(PUT_KEY, request, PutKeyResponse)
 
     def stabilize(self):
         raise NotImplementedError

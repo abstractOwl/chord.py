@@ -1,12 +1,12 @@
-from typing import Dict, List, Optional, Tuple
+from __future__ import annotations
+import json
+from typing import Type
 
 import requests
 
 from chord.exceptions import NodeFailureException
-from chord.http.constants import (
-        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
-        GET, PUT, TIMEOUT
-)
+from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
+from chord.model import BaseResponse
 from chord.node import ChordNode
 
 
@@ -14,55 +14,26 @@ class HttpChordTransport:
     """
     HTTP transport implementation for Chord. node_id is {hostname}:{port}.
     """
-    def __init__(self, node_id: str):
+    def __init__(self, transport_factory: HttpChordTransportFactory, node_id: str):
         self.node_id = node_id
+        self.marshaller = JsonChordMarshaller()
+        self.unmarshaller = JsonChordUnmarshaller(transport_factory)
 
-    def _make_request(self, command: str, **params):
+    def make_request(self, command: str, request: BaseRequest, response_cls: Type[BaseResponse]):
         try:
-            return requests.get(
-                    f"http://{self.node_id}{command}",
-                    params=params,
-                    timeout=TIMEOUT
-            ).json()
+            params = self.marshaller.marshal(request)
+            resp = requests.post(
+                    f"http://{self.node_id}/{command}",
+                    headers={"Content-Type": "application/json"},
+                    data=params,
+            )
+            json = resp.json()
+            return self.unmarshaller.unmarshal(json, response_cls)
+
         except requests.exceptions.RequestException as ex:
-            raise NodeFailureException(f"Failed: {self.node_id}{command}") from ex
-
-    def node(self) -> Dict:
-        return self._make_request(NODE)
-
-    def create(self):
-        self._make_request(CREATE)
-
-    def find_successor(self, key: int) -> Tuple[str, int]:
-        result = self._make_request(FIND_SUCCESSOR, key=key)
-        hops = result["hops"]
-        return result["successor"]["node_id"], hops
-
-    def join(self, remote_node: ChordNode):
-        self._make_request(JOIN, node_id=remote_node.node_id)
-
-    def notify(self, remote_node: ChordNode):
-        self._make_request(NOTIFY, node_id=remote_node.node_id)
-
-    def get_predecessor(self) -> Optional[str]:
-        predecessor = self._make_request(GET_PREDECESSOR)
-        if "node_id" in predecessor:
-            return predecessor["node_id"]
-        return None
-
-    def get_successor_list(self) -> List[str]:
-        return self._make_request(GET_SUCCESSOR_LIST)
-
-    def shutdown(self) -> Dict:
-        return self._make_request(SHUTDOWN)
-
-    def get(self, key: str) -> str:
-        return self._make_request(GET, key=key)
-
-    def put(self, key: str, value: str, no_redirect: bool=False):
-        return self._make_request(PUT, key=key, value=value, no_redirect=no_redirect)
+            raise NodeFailureException(f"Failed: {self.node_id}/{command}") from ex
 
 
 class HttpChordTransportFactory:
     def new_transport(self, node_id: str):
-        return HttpChordTransport(node_id)
+        return HttpChordTransport(self, node_id)

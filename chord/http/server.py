@@ -7,12 +7,14 @@ from flask import Flask, jsonify, request
 from flask.logging import create_logger
 
 from chord.exceptions import NodeFailureException
-from chord.http.constants import (
+from chord.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
-        GET, PUT
+        GET_KEY, PUT_KEY
 )
 from chord.http.marshaller import marshal
 from chord.http.transport import HttpChordTransportFactory
+from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
+from chord.model import *
 from chord.node import ChordNode, RemoteChordNode
 from chord.storage import DictChordStorage
 
@@ -20,6 +22,9 @@ from chord.storage import DictChordStorage
 APP = Flask(__name__)
 CHORD_NODE = None
 TRANSPORT_FACTORY = HttpChordTransportFactory()
+
+MARSHALLER = JsonChordMarshaller()
+UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT_FACTORY)
 
 logging.basicConfig()
 LOG = create_logger(APP)
@@ -30,7 +35,7 @@ LOG.setLevel(logging.INFO)
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE.get_successor_list():
+            if CHORD_NODE.get_successor_list(GetSuccessorListRequest()).successor_list:
                 LOG.info("Running maintenance tasks...")
 
                 try:
@@ -53,81 +58,87 @@ def schedule_maintenance_tasks():
     thread.start()
 
 
-@APP.route(NODE)
+@APP.route("/" + NODE, methods=["POST"])
 def node_info():
-    LOG.info("%s: Returning node info", NODE)
-    return jsonify(marshal(CHORD_NODE.node()))
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, NodeRequest)
+    LOG.info("%s: %s", NODE, req)
+    return MARSHALLER.marshal(CHORD_NODE.node(req))
 
 
-@APP.route(CREATE)
+@APP.route("/" + CREATE, methods=["POST"])
 def create():
-    LOG.info("%s: Creating node ring", CREATE)
-    CHORD_NODE.create()
-    return jsonify({})
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, CreateRequest)
+    LOG.info("%s: %s", CREATE, req)
+    return MARSHALLER.marshal(CHORD_NODE.create(req))
 
 
-@APP.route(FIND_SUCCESSOR)
+@APP.route("/" + FIND_SUCCESSOR, methods=["POST"])
 def find_successor():
-    key = int(request.args.get("key"))
-    LOG.info("%s: Finding successor for %s", FIND_SUCCESSOR, key)
-    target, hops = CHORD_NODE.find_successor(key)
-    return jsonify({
-        "hops": hops,
-        "successor": marshal(target)
-    })
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, FindSuccessorRequest)
+    LOG.info("%s: %s", FIND_SUCCESSOR, req)
+    return MARSHALLER.marshal(CHORD_NODE.find_successor(req))
 
 
-@APP.route(JOIN)
+@APP.route("/" + JOIN, methods=["POST"])
 def join():
-    remote_node = request.args.get("node_id")
-    LOG.info("%s: Joining node %s", JOIN, remote_node)
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, JoinRequest)
+    LOG.info("%s: %s", JOIN, req)
+    return MARSHALLER.marshal(CHORD_NODE.join(req))
 
-    CHORD_NODE.join(RemoteChordNode(TRANSPORT_FACTORY, remote_node))
-    return jsonify({})
 
-
-@APP.route(NOTIFY)
+@APP.route("/" + NOTIFY, methods=["POST"])
 def notify():
-    remote_node = request.args.get("node_id")
-    LOG.info("%s: Notifying node %s", NOTIFY, remote_node)
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, NotifyRequest)
+    LOG.info("%s: %s", NOTIFY, req)
+    return MARSHALLER.marshal(CHORD_NODE.notify(req))
 
-    CHORD_NODE.notify(RemoteChordNode(TRANSPORT_FACTORY, remote_node))
-    return jsonify({})
 
-
-@APP.route(GET_PREDECESSOR)
+@APP.route("/" + GET_PREDECESSOR, methods=["POST"])
 def get_predecessor():
-    LOG.info("%s: Getting predecessor", GET_PREDECESSOR)
-    return jsonify(marshal(CHORD_NODE.get_predecessor()))
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, GetPredecessorRequest)
+    LOG.info("%s: %s", GET_PREDECESSOR, req)
+    return MARSHALLER.marshal(CHORD_NODE.get_predecessor(req))
 
 
-@APP.route(GET_SUCCESSOR_LIST)
+@APP.route("/" + GET_SUCCESSOR_LIST, methods=["POST"])
 def get_successor_list():
-    LOG.info("%s: Getting successor list", GET_SUCCESSOR_LIST)
-    return jsonify([successor.node_id for successor in CHORD_NODE.get_successor_list()])
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, GetSuccessorListRequest)
+    LOG.info("%s: %s", GET_SUCCESSOR_LIST, req)
+    return MARSHALLER.marshal(CHORD_NODE.get_successor_list(req))
 
 
-@APP.route(SHUTDOWN)
+@APP.route("/" + SHUTDOWN, methods=["POST"])
 def shutdown():
-    LOG.info("%s: Shutting down", SHUTDOWN)
-    CHORD_NODE.shutdown()
-    request.environ.get('werkzeug.server.shutdown')()
+    try:
+        payload = request.get_json(force=True)
+        req = UNMARSHALLER.unmarshal(payload, ShutdownRequest)
+        LOG.info("%s: %s", SHUTDOWN, req)
+        return MARSHALLER.marshal(CHORD_NODE.shutdown(req))
+    finally:
+        request.environ.get('werkzeug.server.shutdown')()
 
 
-@APP.route(GET)
+@APP.route("/" + GET_KEY, methods=["POST"])
 def get():
-    key = request.args.get("key")
-    LOG.info("%s: Getting key %s", GET, key)
-    return jsonify(CHORD_NODE.get(key))
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, GetKeyRequest)
+    LOG.info("%s: %s", GET_KEY, req)
+    return MARSHALLER.marshal(CHORD_NODE.get(req))
 
 
-@APP.route(PUT)
+@APP.route("/" + PUT_KEY, methods=["POST"])
 def put():
-    key = request.args.get("key")
-    value = request.args.get("value")
-    no_redirect = request.args.get("no_redirect") == "True"
-    LOG.info("%s: Putting key %s=%s, no_redirect=%s", GET, key, value, no_redirect)
-    return jsonify(CHORD_NODE.put(key, value, no_redirect))
+    payload = request.get_json(force=True)
+    req = UNMARSHALLER.unmarshal(payload, PutKeyRequest)
+    LOG.info("%s: %s", PUT_KEY, req)
+    return MARSHALLER.marshal(CHORD_NODE.put(req))
 
 
 if __name__ == '__main__':

@@ -4,14 +4,15 @@ from typing import Optional, TYPE_CHECKING, Union
 
 import chord
 
-
 if TYPE_CHECKING:
     import chord.node
 
 
+@dataclass
 class BaseRequest:
     pass
 
+@dataclass
 class BaseResponse:
     pass
 
@@ -50,7 +51,7 @@ class JoinResponse(BaseResponse):
 
 @dataclass
 class NotifyRequest(BaseRequest):
-    remote_node: chord.node.ChordNode
+    remote_node: Optional[chord.node.ChordNode]
 
 @dataclass
 class NotifyResponse(BaseResponse):
@@ -70,7 +71,7 @@ class GetSuccessorListRequest(BaseRequest):
 
 @dataclass
 class GetSuccessorListResponse(BaseResponse):
-    successor_list: Optional[list[chord.node.ChordNode]]
+    successor_list: list[chord.node.ChordNode]
 
 @dataclass
 class ShutdownRequest(BaseRequest):

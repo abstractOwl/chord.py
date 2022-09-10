@@ -4,20 +4,24 @@ from math import ceil
 from random import choice, choices
 from time import sleep
 from threading import Thread
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Optional, Type
 from uuid import uuid4
 
-from chord.constants import *
 from chord.exceptions import NodeFailureException
 from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
-from chord.model import *
+from chord.model import (
+        BaseRequest, BaseResponse, NodeRequest, NodeResponse, CreateRequest, CreateResponse,
+        FindSuccessorRequest, FindSuccessorResponse, JoinRequest, JoinResponse, NotifyRequest,
+        NotifyResponse, GetPredecessorRequest, GetPredecessorResponse, GetSuccessorListRequest,
+        GetSuccessorListResponse, ShutdownRequest, ShutdownResponse, GetKeyRequest, PutKeyRequest
+)
 from chord.node import ChordNode, RemoteChordNode
 from chord.storage import DictChordStorage
 
 
-nodes: Dict[str, Optional[ChordNode]] = {}
+nodes: dict[str, Optional[ChordNode]] = {}
 ITERATIONS: int = 1000
-joined_list: List[str] = []
+joined_list: list[str] = []
 
 
 def main():
@@ -30,7 +34,7 @@ def main():
     successor_list_size = args.successor_list_size
     ring_size = args.ring_size
 
-    transport_factory = LocalChordTransportFactory()
+    transport = LocalChordTransport()
 
     # Start maintenance thread
     def run_maintenance_tasks():
@@ -50,10 +54,10 @@ def main():
 
     # Init nodes
     print("Initiating node ring...")
-    create_node(transport_factory, successor_list_size, ring_size)
+    create_node(transport, successor_list_size, ring_size)
     for _ in range(args.nodes - 1):
         create_node(
-                transport_factory,
+                transport,
                 successor_list_size,
                 ring_size,
                 choice(joined_list)
@@ -68,7 +72,7 @@ def main():
     print("Running first simulation")
     hops_list = []
     for i in range(ITERATIONS):
-        response = RemoteChordNode(transport_factory, choice(joined_list)).find_successor(
+        response = RemoteChordNode(transport, choice(joined_list)).find_successor(
                 FindSuccessorRequest(uuid4().hex)
         )
         hops_list.append(response.hops)
@@ -88,7 +92,7 @@ def main():
     failed = 0
     for i in range(ITERATIONS):
         try:
-            response = RemoteChordNode(transport_factory, choice(joined_list)).find_successor(
+            response = RemoteChordNode(transport, choice(joined_list)).find_successor(
                     FindSuccessorRequest(uuid4().hex)
             )
             hops_list.append(response.hops)
@@ -98,11 +102,11 @@ def main():
         if choices([True, False], weights=[5, 95])[0]:
             node_id = choice(joined_list)
             print("Shutting down ", node_id)
-            RemoteChordNode(transport_factory, node_id).shutdown(ShutdownRequest())
+            RemoteChordNode(transport, node_id).shutdown(ShutdownRequest())
 
         if choices([True, False], weights=[5, 95])[0]:
             create_node(
-                transport_factory,
+                transport,
                 successor_list_size,
                 ring_size,
                 choice(joined_list)
@@ -117,92 +121,96 @@ def main():
     print("Failed calls", failed)
 
 
-class LocalChordTransport:
-    def __init__(self, transport_factory, node_id):
+class LocalChordConnection:
+    def __init__(self, transport, node_id):
         self.node_id = node_id
-        self._transport_factory = transport_factory
+        self._transport = transport
         self.marshaller = JsonChordMarshaller()
-        self.unmarshaller = JsonChordUnmarshaller(transport_factory)
+        self.unmarshaller = JsonChordUnmarshaller(transport)
 
     def _get_node(self):
-        if self.node_id in joined_list and nodes[self.node_id] and nodes[self.node_id]._node.is_alive():
+        if (self.node_id in joined_list
+                and nodes[self.node_id]
+                and nodes[self.node_id]._node.is_alive()):
             return nodes[self.node_id]
         raise NodeFailureException(self.node_id)
 
-    def make_request(self, command: str, request: BaseRequest, response_cls: Type[BaseResponse]) -> Dict:
+    def make_request(
+            self, command: str, request: BaseRequest, response_cls: Type[BaseResponse]
+    ) -> dict:
         client = self._get_node()
-        fn = getattr(client, command)
+        command_fn = getattr(client, command)
 
         params = self.marshaller.marshal(request)
-        obj = fn(json.loads(params))
+        obj = command_fn(json.loads(params))
         return self.unmarshaller.unmarshal(obj, response_cls)
 
 
-class LocalChordTransportFactory:
-    def new_transport(self, node_id: str):
-        return LocalChordTransport(self, node_id)
+class LocalChordTransport:
+    def create_connection(self, node_id: str):
+        return LocalChordConnection(self, node_id)
 
 
 class LocalChordHandler:
-    def __init__(self, node_id, transport_factory, storage, successor_list_size, ring_size):
-        self.node_id = node_id
+    def __init__(self, node_id, transport, storage, successor_list_size, ring_size):
+        self._node_id = node_id
         self._node: ChordNode = ChordNode(node_id, storage, successor_list_size, ring_size)
-        self.marshaller = JsonChordMarshaller()
-        self.unmarshaller = JsonChordUnmarshaller(transport_factory)
+        self._marshaller = JsonChordMarshaller()
+        self._unmarshaller = JsonChordUnmarshaller(transport)
 
     def create(self, payload: dict) -> CreateResponse:
-        request = self.unmarshaller.unmarshal(payload, CreateRequest)
+        request = self._unmarshaller.unmarshal(payload, CreateRequest)
         #print("%s: %s" % (CREATE, request))
-        return json.loads(self.marshaller.marshal(self._node.create(request)))
+        return json.loads(self._marshaller.marshal(self._node.create(request)))
 
     def node(self, payload: dict) -> NodeResponse:
-        request = self.unmarshaller.unmarshal(payload, NodeRequest)
+        request = self._unmarshaller.unmarshal(payload, NodeRequest)
         #print("%s: %s" % (NODE, request))
-        return json.loads(self.marshaller.marshal(self._node.node(request)))
+        return json.loads(self._marshaller.marshal(self._node.node(request)))
 
     def join(self, payload: dict) -> JoinResponse:
-        request = self.unmarshaller.unmarshal(payload, JoinRequest)
+        request = self._unmarshaller.unmarshal(payload, JoinRequest)
         #print("%s: %s" % (JOIN, request))
-        return json.loads(self.marshaller.marshal(self._node.join(request)))
+        return json.loads(self._marshaller.marshal(self._node.join(request)))
 
     def notify(self, payload: dict) -> NotifyResponse:
-        request = self.unmarshaller.unmarshal(payload, NotifyRequest)
+        request = self._unmarshaller.unmarshal(payload, NotifyRequest)
         #print("%s: %s" % (NOTIFY, request))
-        return json.loads(self.marshaller.marshal(self._node.notify(request)))
+        return json.loads(self._marshaller.marshal(self._node.notify(request)))
 
     def find_successor(self, payload: dict) -> FindSuccessorResponse:
-        request = self.unmarshaller.unmarshal(payload, FindSuccessorRequest)
+        request = self._unmarshaller.unmarshal(payload, FindSuccessorRequest)
         #print("%s: %s" % (FIND_SUCCESSOR, request))
-        return json.loads(self.marshaller.marshal(self._node.find_successor(request)))
+        return json.loads(self._marshaller.marshal(self._node.find_successor(request)))
 
     def get_predecessor(self, payload: dict) -> GetPredecessorResponse:
-        request = self.unmarshaller.unmarshal(payload, GetPredecessorRequest)
+        request = self._unmarshaller.unmarshal(payload, GetPredecessorRequest)
         #print("%s: %s" % (GET_PREDECESSOR, request))
-        return json.loads(self.marshaller.marshal(self._node.get_predecessor(request)))
+        return json.loads(self._marshaller.marshal(self._node.get_predecessor(request)))
 
     def get_successor_list(self, payload: dict) -> GetSuccessorListResponse:
-        request = self.unmarshaller.unmarshal(payload, GetSuccessorListRequest)
+        request = self._unmarshaller.unmarshal(payload, GetSuccessorListRequest)
         #print("%s: %s" % (GET_SUCCESSOR_LIST, request))
-        return json.loads(self.marshaller.marshal(self._node.get_successor_list(request)))
+        return json.loads(self._marshaller.marshal(self._node.get_successor_list(request)))
 
     def shutdown(self, payload: dict) -> ShutdownResponse:
         try:
-            request = self.unmarshaller.unmarshal(payload, ShutdownRequest)
+            request = self._unmarshaller.unmarshal(payload, ShutdownRequest)
             #print("%s: %s" % (SHUTDOWN, request))
-            return json.loads(self.marshaller.marshal(self._node.shutdown(request)))
+            return json.loads(self._marshaller.marshal(self._node.shutdown(request)))
         finally:
-            del nodes[self.node_id]
-            joined_list.remove(self.node_id)
+            del nodes[self._node_id]
+            joined_list.remove(self._node_id)
 
     def get(self, payload: dict) -> GetKeyRequest:
-        request = self.unmarshaller.unmarshal(payload, GetKeyRequest)
+        request = self._unmarshaller.unmarshal(payload, GetKeyRequest)
         #print("%s: %s" % (GET_KEY, request))
-        return json.loads(self.marshaller.marshal(self._node.get(request)))
+        return json.loads(self._marshaller.marshal(self._node.get(request)))
 
     def put(self, payload: dict) -> PutKeyRequest:
-        request = self.unmarshaller.unmarshal(payload, PutKeyRequest)
+        request = self._unmarshaller.unmarshal(payload, PutKeyRequest)
         #print("%s: %s" % (PUT_KEY, request))
-        return json.loads(self.marshaller.marshal(self._node.put(request)))
+        return json.loads(self._marshaller.marshal(self._node.put(request)))
 
 
 def avg(in_list):
@@ -223,19 +231,19 @@ def print_stats(in_list):
     print("p100", percentile(100, sorted_in_list))
 
 
-def create_node(transport_factory, successor_list_size, ring_size, join_node_id=None):
+def create_node(transport, successor_list_size, ring_size, join_node_id=None):
     node_id = uuid4().hex
-    node = LocalChordHandler(node_id, transport_factory, DictChordStorage(), successor_list_size, ring_size)
+    node = LocalChordHandler(node_id, transport, DictChordStorage(), successor_list_size, ring_size)
     nodes[node_id] = node
     joined_list.append(node_id)
     print("Added %s" % node_id)
 
     if join_node_id:
-        RemoteChordNode(transport_factory, node_id).join(
-                JoinRequest(RemoteChordNode(transport_factory, join_node_id))
+        RemoteChordNode(transport, node_id).join(
+                JoinRequest(RemoteChordNode(transport, join_node_id))
         )
     else:
-        RemoteChordNode(transport_factory, node_id).create(CreateRequest())
+        RemoteChordNode(transport, node_id).create(CreateRequest())
 
     return node_id
 

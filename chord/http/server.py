@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask.logging import create_logger
 
 from chord.exceptions import NodeFailureException
@@ -11,16 +11,20 @@ from chord.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
         GET_KEY, PUT_KEY
 )
-from chord.http.transport import HttpChordTransportFactory
+from chord.http.transport import HttpChordTransport
 from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
-from chord.model import *
-from chord.node import ChordNode, RemoteChordNode
+from chord.model import (
+        CreateRequest, FindSuccessorRequest, GetKeyRequest, GetPredecessorRequest,
+        GetSuccessorListRequest, JoinRequest, NodeRequest, NotifyRequest, PutKeyRequest,
+        ShutdownRequest
+)
+from chord.node import ChordNode
 from chord.storage import DictChordStorage
 
 
 APP = Flask(__name__)
 CHORD_NODE = None
-TRANSPORT_FACTORY = None
+TRANSPORT = None
 MARSHALLER = None
 UNMARSHALLER = None
 
@@ -155,8 +159,8 @@ if __name__ == '__main__':
 
     LOG.info("Running on %s with successor list size %s and ring size %s...",
             node_id, successor_list_size, ring_size)
-    TRANSPORT_FACTORY = HttpChordTransportFactory(successor_list_size)
+    TRANSPORT = HttpChordTransport(successor_list_size)
     MARSHALLER = JsonChordMarshaller()
-    UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT_FACTORY)
+    UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT)
     CHORD_NODE = ChordNode(node_id, DictChordStorage(), successor_list_size, ring_size)
     APP.run(hostname, port)

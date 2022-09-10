@@ -5,13 +5,22 @@ See https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 """
 from __future__ import annotations
 from hashlib import sha256
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import Iterator, Optional
 import logging
 
-from chord.constants import *
+from chord.constants import (
+        CREATE, NODE, NOTIFY, FIND_SUCCESSOR, GET_PREDECESSOR, GET_SUCCESSOR_LIST,
+        JOIN, SHUTDOWN, GET_KEY, PUT_KEY
+)
 from chord.exceptions import NodeFailureException
-from chord.model import *
-from chord.storage import DictChordStorage
+from chord.model import (
+        NodeRequest, NodeResponse, CreateRequest, CreateResponse, FindSuccessorRequest,
+        FindSuccessorResponse, JoinRequest, JoinResponse, NotifyRequest, NotifyResponse,
+        GetPredecessorRequest, GetPredecessorResponse, GetSuccessorListRequest,
+        GetSuccessorListResponse, ShutdownRequest, ShutdownResponse, GetKeyRequest, GetKeyResponse,
+        PutKeyRequest, PutKeyResponse
+)
+from chord.storage import ChordStorage, NullChordStorage
 
 
 logger = logging.getLogger(__name__)
@@ -19,30 +28,30 @@ logger = logging.getLogger(__name__)
 
 class ChordNode:
     """ Base Chord DHT Node implementation. """
-    def __init__(self, node_id: str, storage: DictChordStorage, successor_list_size: int, ring_size: int):
+    def __init__(self, node_id: str, storage: ChordStorage, successor_list_size: int, ring_size: int):
         # TODO: Split options into protocol, config, storage_handler
         self.node_id = node_id
-        self.predecessor = None
+        self.predecessor: Optional[ChordNode] = None
         self._storage = storage
         self._next = 0
         self._is_shutdown = False
         self._successor_list_size = successor_list_size
 
         self.ring_size = ring_size
-        self.fingers = [None] * ring_size
-        self.successor_list = None
+        self.fingers: list[Optional[ChordNode]] = [None] * ring_size
+        self.successor_list: list[ChordNode] = []
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return isinstance(other, ChordNode) and self.node_id == other.node_id
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.node_id)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         bucket = repr(self._bucketize(self.node_id))
         return f"{__name__}({self.node_id}, {bucket}, {self.ring_size})"
 
-    def _bucketize(self, string: str):
+    def _bucketize(self, string: str) -> int:
         """
         Returns the consistent hash for a string.
         :param key: The key to hash
@@ -103,7 +112,7 @@ class ChordNode:
         """ Return True if this node is alive. """
         return not self._is_shutdown
 
-    def stabilize(self):
+    def stabilize(self) -> None:
         """
         Verifies this node's successor and tells the successor about this node.
         """
@@ -135,12 +144,13 @@ class ChordNode:
         """
         predecessor = self.get_predecessor(GetPredecessorRequest()).node
         if (predecessor is None
-                or self._between_nodes(request.remote_node, predecessor, self)
+                # mypy isn't smart enough to realize predecessor cannot be None here
+                or self._between_nodes(request.remote_node, predecessor, self)  # type:ignore
                 or not predecessor.is_alive()):
             self.set_predecessor(request.remote_node)
         return NotifyResponse()
 
-    def fix_fingers(self):
+    def fix_fingers(self) -> None:
         """ Refreshes finger table entries. """
         finger_bucket = self._bucketize(self.node_id)
         finger_bucket += 2 ** self._next
@@ -150,7 +160,7 @@ class ChordNode:
 
         self._next = (self._next + 1) % self.ring_size
 
-    def check_predecessor(self):
+    def check_predecessor(self) -> None:
         """ Check that the predecessor is still alive. """
         predecessor = self.get_predecessor(GetPredecessorRequest()).node
         if predecessor and not predecessor.is_alive():
@@ -172,8 +182,7 @@ class ChordNode:
         ) or self._bucketize(current_successor.node_id) == request.key):
             if current_successor.is_alive():
                 return FindSuccessorResponse(current_successor, 1)
-            else:
-                return FindSuccessorResponse(self, 1)
+            return FindSuccessorResponse(self, 1)
 
         for closest in self.closest_preceding_nodes(key_bucket):
             if closest == self:
@@ -193,8 +202,9 @@ class ChordNode:
         immediately precedes the key in the Chord ring.
         :param key: A string key
         """
+        real_fingers = [f for f in self.fingers if f is not None]  # for mypy
         succeeding_nodes = sorted(
-                set(self.successor_list + self.fingers) - {None},
+                set(self.successor_list + real_fingers),
                 key=lambda node: self._bucketize(node.node_id)
         )
 
@@ -211,19 +221,20 @@ class ChordNode:
     def shutdown(self, request: ShutdownRequest) -> ShutdownResponse:
         """ Shuts down the node gracefully. """
         successor_list = self.get_successor_list(GetSuccessorListRequest()).successor_list
-        for successor in successor_list:
-            try:
-                self._is_shutdown = True
-                self.set_predecessor(successor)
-                successor.notify(NotifyRequest(self.get_predecessor(GetPredecessorRequest()).node))
+        if successor_list:
+            for successor in successor_list:
+                try:
+                    self._is_shutdown = True
+                    self.set_predecessor(successor)
+                    successor.notify(NotifyRequest(self.get_predecessor(GetPredecessorRequest()).node))
 
-                for key in self._storage.list():
-                    successor.put(PutKeyRequest(key, self._storage.get(key), True))
+                    for key in self._storage.list():
+                        successor.put(PutKeyRequest(key, self._storage.get(key), True))
 
-                return ShutdownResponse()
+                    return ShutdownResponse()
 
-            except NodeFailureException:
-                pass
+                except NodeFailureException:
+                    pass
 
         raise RuntimeError("Didn't find any alive nodes to handoff to!")
 
@@ -240,7 +251,7 @@ class ChordNode:
         """ Returns the predecessor node. """
         return GetPredecessorResponse(self.predecessor)
 
-    def set_predecessor(self, value: ChordNode):
+    def set_predecessor(self, value: Optional[ChordNode]) -> None:
         """ Sets this node's predecessor. """
         self.predecessor = value
 
@@ -251,10 +262,9 @@ class ChordNode:
         """
         response = self.find_successor(FindSuccessorRequest(request.key))
         if response.node == self:
-            if self._storage.has(request.key):
-                return GetKeyResponse(self, response.hops, self._storage.get(request.key), True)
-            else:
+            if not self._storage.has(request.key):
                 return GetKeyResponse(self, response.hops, None, False)
+            return GetKeyResponse(self, response.hops, self._storage.get(request.key), True)
         return response.node.get(request)
 
     def put(self, request: PutKeyRequest) -> PutKeyResponse:
@@ -276,16 +286,16 @@ class ChordNode:
 class RemoteChordNode(ChordNode):
     """ ChordNode proxy for remote operations. """
 
-    def __init__(self, transport_factory, node_id: str):
-        super().__init__(node_id, None, 0, 0)
-        self._transport_factory = transport_factory
-        self._transport = transport_factory.new_transport(node_id)
+    def __init__(self, transport, node_id: str):
+        super().__init__(node_id, NullChordStorage(), 0, 0)
+        self._transport = transport
+        self._connection = transport.create_connection(node_id)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{__name__}({self.node_id})"
 
     def node(self, request: NodeRequest) -> NodeResponse:
-        return self._transport.make_request(NODE, request, NodeResponse)
+        return self._connection.make_request(NODE, request, NodeResponse)
 
     def is_alive(self) -> bool:
         try:
@@ -295,45 +305,45 @@ class RemoteChordNode(ChordNode):
             return False
 
     def create(self, request: CreateRequest) -> CreateResponse:
-        return self._transport.make_request(CREATE, request, CreateResponse)
+        return self._connection.make_request(CREATE, request, CreateResponse)
 
     def find_successor(self, request: FindSuccessorRequest) -> FindSuccessorResponse:
-        return self._transport.make_request(FIND_SUCCESSOR, request, FindSuccessorResponse)
+        return self._connection.make_request(FIND_SUCCESSOR, request, FindSuccessorResponse)
 
     def join(self, request: JoinRequest) -> JoinResponse:
-        return self._transport.make_request(JOIN, request, JoinResponse)
+        return self._connection.make_request(JOIN, request, JoinResponse)
 
     def notify(self, request: NotifyRequest) -> NotifyResponse:
-        return self._transport.make_request(NOTIFY, request, NotifyResponse)
+        return self._connection.make_request(NOTIFY, request, NotifyResponse)
 
     def get_predecessor(self, request: GetPredecessorRequest) -> GetPredecessorResponse:
-        return self._transport.make_request(GET_PREDECESSOR, request, GetPredecessorResponse)
+        return self._connection.make_request(GET_PREDECESSOR, request, GetPredecessorResponse)
 
-    def set_predecessor(self, value: ChordNode):
+    def set_predecessor(self, value: Optional[ChordNode]) -> None:
         raise NotImplementedError
 
     def _get_successor(self) -> ChordNode:
         raise NotImplementedError
 
     def get_successor_list(self, request: GetSuccessorListRequest) -> GetSuccessorListResponse:
-        return self._transport.make_request(GET_SUCCESSOR_LIST, request, GetSuccessorListResponse)
+        return self._connection.make_request(GET_SUCCESSOR_LIST, request, GetSuccessorListResponse)
 
     def shutdown(self, request: ShutdownRequest) -> ShutdownResponse:
-        return self._transport.make_request(SHUTDOWN, request, ShutdownResponse)
+        return self._connection.make_request(SHUTDOWN, request, ShutdownResponse)
 
     def get(self, request: GetKeyRequest) -> GetKeyResponse:
-        return self._transport.make_request(GET_KEY, request, GetKeyResponse)
+        return self._connection.make_request(GET_KEY, request, GetKeyResponse)
 
     def put(self, request: PutKeyRequest) -> PutKeyResponse:
-        return self._transport.make_request(PUT_KEY, request, PutKeyResponse)
+        return self._connection.make_request(PUT_KEY, request, PutKeyResponse)
 
-    def stabilize(self):
+    def stabilize(self) -> None:
         raise NotImplementedError
 
-    def fix_fingers(self):
+    def fix_fingers(self) -> None:
         raise NotImplementedError
 
-    def check_predecessor(self):
+    def check_predecessor(self) -> None:
         raise NotImplementedError
 
     def closest_preceding_nodes(self, key: int) -> Iterator["ChordNode"]:

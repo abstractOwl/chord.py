@@ -5,23 +5,30 @@ import socketserver
 import sys
 import threading
 import time
-from typing import Tuple
 from xmlrpc.server import SimpleXMLRPCServer
 
-from chord.constants import *
+from chord.constants import (
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
+        GET_KEY, PUT_KEY
+)
 from chord.exceptions import NodeFailureException
 from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
-from chord.model import *
-from chord.node import ChordNode, RemoteChordNode
+from chord.model import (
+        CreateRequest, CreateResponse, FindSuccessorRequest, FindSuccessorResponse, GetKeyRequest,
+        GetPredecessorRequest, GetPredecessorResponse, GetSuccessorListRequest,
+        GetSuccessorListResponse, JoinRequest, JoinResponse, NodeRequest, NodeResponse,
+        NotifyRequest, NotifyResponse, PutKeyRequest, ShutdownRequest, ShutdownResponse
+)
+from chord.node import ChordNode
 from chord.storage import DictChordStorage
-from chord.xmlrpc.transport import XmlRpcChordTransportFactory
+from chord.xmlrpc.transport import XmlRpcChordTransport
 
 
 CHORD_NODE = None
-TRANSPORT_FACTORY = XmlRpcChordTransportFactory()
+TRANSPORT = XmlRpcChordTransport()
 
 MARSHALLER = JsonChordMarshaller()
-UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT_FACTORY)
+UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT)
 
 logging.basicConfig()
 LOG = logging.getLogger(__name__)
@@ -116,7 +123,8 @@ class ChordNodeHandler:
 
 # The default SimpleXMLRPCServer is single-threaded. This creates a threaded
 # XMLRPC server.
-class ThreadedXmlRpcServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer): pass
+class ThreadedXmlRpcServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
+    pass
 
 
 if __name__ == '__main__':

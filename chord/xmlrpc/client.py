@@ -1,9 +1,13 @@
 import argparse
 import logging
 
-from chord.model import *
+from chord.model import (
+        NodeRequest, CreateRequest, FindSuccessorRequest, JoinRequest, NotifyRequest,
+        GetPredecessorRequest, GetSuccessorListRequest, ShutdownRequest, GetKeyRequest,
+        PutKeyRequest
+)
 from chord.node import RemoteChordNode
-from chord.xmlrpc.transport import XmlRpcChordTransportFactory
+from chord.xmlrpc.transport import XmlRpcChordTransport
 
 
 logging.basicConfig()
@@ -46,8 +50,8 @@ if __name__ == '__main__':
     node_id = f"{hostname}:{port}"
 
 
-    transport_factory = XmlRpcChordTransportFactory()
-    node = RemoteChordNode(transport_factory, node_id)
+    transport = XmlRpcChordTransport()
+    node = RemoteChordNode(transport, node_id)
 
     if args.node:
         logger.info("Getting node info from [%s]", node)
@@ -60,11 +64,11 @@ if __name__ == '__main__':
         logger.info("Finding successor for [%s] starting at [%s]", key, node)
         logger.info(node.find_successor(FindSuccessorRequest(args.find_successor)))
     elif args.join:
-        remote_node = RemoteChordNode(transport_factory, args.join)
+        remote_node = RemoteChordNode(transport, args.join)
         logger.info("Joining [%s] to node [%s]", node, remote_node)
         logger.info(node.join(JoinRequest(remote_node)))
     elif args.notify:
-        remote_node = RemoteChordNode(transport_factory, args.join)
+        remote_node = RemoteChordNode(transport, args.join)
         logger.info("Notifying [%s] of node [%s]", node, remote_node)
         logger.info(node.notify(NotifyRequest(remote_node)))
     elif args.predecessor:

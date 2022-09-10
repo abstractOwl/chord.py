@@ -2,8 +2,6 @@ import logging
 import json
 import socketserver
 import sys
-import threading
-import time
 from xmlrpc.server import SimpleXMLRPCServer
 
 import click
@@ -12,7 +10,6 @@ from chord.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
         GET_KEY, PUT_KEY
 )
-from chord.exceptions import NodeFailureException
 from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
 from chord.model import (
         CreateRequest, CreateResponse, FindSuccessorRequest, FindSuccessorResponse, GetKeyRequest,
@@ -32,7 +29,7 @@ log.setLevel(logging.DEBUG)
 
 # Needed since XMLRPC marshals object instances to Dict when sending but
 # doesn't unmarshal them when receiving.
-class ChordNodeHandler:
+class ChordNodeProxy:
     def __init__(self, node_id, storage, successor_list_size, ring_size):
         transport = XmlRpcChordTransport()
 
@@ -40,30 +37,8 @@ class ChordNodeHandler:
         self._marshaller = JsonChordMarshaller()
         self._unmarshaller = JsonChordUnmarshaller(transport)
 
-    def schedule_maintenance_tasks(self):
-        def loop():
-            while True:
-                if self._node.get_successor_list(GetSuccessorListRequest()).successor_list:
-                    log.info("Running maintenance tasks...")
-
-                    try:
-                        self._node.fix_fingers()
-                    except NodeFailureException:
-                        log.info("Node failed while trying to fix fingers")
-
-                    try:
-                        self._node.stabilize()
-                    except NodeFailureException:
-                        log.info("Node failed while trying to stabilize")
-
-                    self._node.check_predecessor()
-
-                    log.info("Done.")
-
-                time.sleep(1)
-
-        thread = threading.Thread(target=loop, daemon=True)
-        thread.start()
+    def schedule_maintenance_tasks(self) -> None:
+        self._node.schedule_maintenance_tasks()
 
     def create(self, payload: dict) -> CreateResponse:
         request = self._unmarshaller.unmarshal(payload, CreateRequest)
@@ -138,7 +113,7 @@ def run(hostname: str, port: str, successor_list_size: str, ring_size: str):
 
     log.info("Running on %s with successor list size %s and ring size %s...",
             node_id, successor_list_size_num, ring_size_num)
-    node = ChordNodeHandler(
+    node = ChordNodeProxy(
             node_id, DictChordStorage(), successor_list_size_num, ring_size_num
     )
     node.schedule_maintenance_tasks()

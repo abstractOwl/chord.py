@@ -1,12 +1,9 @@
 import logging
-import threading
-import time
 
 import click
 from flask import Flask, request
 from flask.logging import create_logger
 
-from chord.exceptions import NodeFailureException
 from chord.constants import (
         NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
         GET_KEY, PUT_KEY
@@ -27,33 +24,6 @@ app = Flask(__name__)
 logging.basicConfig()
 log = create_logger(app)
 log.setLevel(logging.INFO)
-
-
-@app.before_first_request
-def schedule_maintenance_tasks():
-    def loop():
-        while True:
-            if app.config["node"].get_successor_list(GetSuccessorListRequest()).successor_list:
-                log.info("Running maintenance tasks...")
-
-                try:
-                    app.config["node"].fix_fingers()
-                except NodeFailureException:
-                    log.info("Node failed while trying to fix fingers")
-
-                try:
-                    app.config["node"].stabilize()
-                except NodeFailureException:
-                    log.info("Node failed while trying to stabilize")
-
-                app.config["node"].check_predecessor()
-
-                log.info("Done.")
-
-            time.sleep(1)
-
-    thread = threading.Thread(target=loop, daemon=True)
-    thread.start()
 
 
 @app.route("/" + NODE, methods=["POST"])
@@ -158,7 +128,9 @@ def run(hostname: str, port: str, successor_list_size: str, ring_size: str):
     app.config["node"] = ChordNode(
             node_id, DictChordStorage(), successor_list_size_num, ring_size_num
     )
+    app.config["node"].schedule_maintenance_tasks()
     app.run(hostname, int(port))
+
 
 if __name__ == '__main__':
     run()

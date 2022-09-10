@@ -156,43 +156,35 @@ class LocalChordHandler:
 
     def create(self, payload: dict) -> CreateResponse:
         request = self._unmarshaller.unmarshal(payload, CreateRequest)
-        #print("%s: %s" % (CREATE, request))
         return json.loads(self._marshaller.marshal(self._node.create(request)))
 
     def node(self, payload: dict) -> NodeResponse:
         request = self._unmarshaller.unmarshal(payload, NodeRequest)
-        #print("%s: %s" % (NODE, request))
         return json.loads(self._marshaller.marshal(self._node.node(request)))
 
     def join(self, payload: dict) -> JoinResponse:
         request = self._unmarshaller.unmarshal(payload, JoinRequest)
-        #print("%s: %s" % (JOIN, request))
         return json.loads(self._marshaller.marshal(self._node.join(request)))
 
     def notify(self, payload: dict) -> NotifyResponse:
         request = self._unmarshaller.unmarshal(payload, NotifyRequest)
-        #print("%s: %s" % (NOTIFY, request))
         return json.loads(self._marshaller.marshal(self._node.notify(request)))
 
     def find_successor(self, payload: dict) -> FindSuccessorResponse:
         request = self._unmarshaller.unmarshal(payload, FindSuccessorRequest)
-        #print("%s: %s" % (FIND_SUCCESSOR, request))
         return json.loads(self._marshaller.marshal(self._node.find_successor(request)))
 
     def get_predecessor(self, payload: dict) -> GetPredecessorResponse:
         request = self._unmarshaller.unmarshal(payload, GetPredecessorRequest)
-        #print("%s: %s" % (GET_PREDECESSOR, request))
         return json.loads(self._marshaller.marshal(self._node.get_predecessor(request)))
 
     def get_successor_list(self, payload: dict) -> GetSuccessorListResponse:
         request = self._unmarshaller.unmarshal(payload, GetSuccessorListRequest)
-        #print("%s: %s" % (GET_SUCCESSOR_LIST, request))
         return json.loads(self._marshaller.marshal(self._node.get_successor_list(request)))
 
     def shutdown(self, payload: dict) -> ShutdownResponse:
         try:
             request = self._unmarshaller.unmarshal(payload, ShutdownRequest)
-            #print("%s: %s" % (SHUTDOWN, request))
             return json.loads(self._marshaller.marshal(self._node.shutdown(request)))
         finally:
             del nodes[self._node_id]
@@ -200,12 +192,10 @@ class LocalChordHandler:
 
     def get(self, payload: dict) -> GetKeyRequest:
         request = self._unmarshaller.unmarshal(payload, GetKeyRequest)
-        #print("%s: %s" % (GET_KEY, request))
         return json.loads(self._marshaller.marshal(self._node.get(request)))
 
     def put(self, payload: dict) -> PutKeyRequest:
         request = self._unmarshaller.unmarshal(payload, PutKeyRequest)
-        #print("%s: %s" % (PUT_KEY, request))
         return json.loads(self._marshaller.marshal(self._node.put(request)))
 
 

@@ -5,8 +5,10 @@ See https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 """
 from __future__ import annotations
 from hashlib import sha256
-from typing import Iterator, Optional
 import logging
+import threading
+import time
+from typing import Iterator, Optional
 
 from chord.constants import (
         CREATE, NODE, NOTIFY, FIND_SUCCESSOR, GET_PREDECESSOR, GET_SUCCESSOR_LIST,
@@ -28,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 class ChordNode:
     """ Base Chord DHT Node implementation. """
-    def __init__(self, node_id: str, storage: ChordStorage, successor_list_size: int, ring_size: int):
+    def __init__(
+            self, node_id: str, storage: ChordStorage, successor_list_size: int, ring_size: int
+    ):
         # TODO: Split options into protocol, config, storage_handler
         self.node_id = node_id
         self.predecessor: Optional[ChordNode] = None
@@ -40,6 +44,31 @@ class ChordNode:
         self.ring_size = ring_size
         self.fingers: list[Optional[ChordNode]] = [None] * ring_size
         self.successor_list: list[ChordNode] = []
+
+    def schedule_maintenance_tasks(self, interval_seconds: int=1):
+        def loop():
+            while True:
+                if self.get_successor_list(GetSuccessorListRequest()).successor_list:
+                    logger.info("Running maintenance tasks...")
+
+                    try:
+                        self.fix_fingers()
+                    except NodeFailureException:
+                        logger.info("Node failed while trying to fix fingers")
+
+                    try:
+                        self.stabilize()
+                    except NodeFailureException:
+                        logger.info("Node failed while trying to stabilize")
+
+                    self.check_predecessor()
+
+                    logger.info("Done.")
+
+                time.sleep(interval_seconds)
+
+        thread = threading.Thread(target=loop, daemon=True)
+        thread.start()
 
     def __eq__(self, other) -> bool:
         return isinstance(other, ChordNode) and self.node_id == other.node_id

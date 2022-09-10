@@ -84,18 +84,18 @@ b4722111be819606dd0f31a82cf40cd562314c9b486cb78d6d76426b9406b60f
 9a9397302ec9c2112154f3c9a023488bc41c25f89e55882b6341eaccce973b98
 ddb24be3a141dd54ea68159f75296533bd39c64df8e98d396e541f30f11f0fa5
 INFO:__main__:Creating node ring at [chord.node(node1:5000)]
-INFO:__main__:None
+INFO:__main__:CreateResponse()
 INFO:__main__:Joining [chord.node(node2:5000)] to node [chord.node(node1:5000)]
-INFO:__main__:None
+INFO:__main__:JoinResponse()
 INFO:__main__:Joining [chord.node(node3:5000)] to node [chord.node(node1:5000)]
-INFO:__main__:None
+INFO:__main__:JoinResponse()
 
-root@node3:/src# python3 -m chord.http.client node3 5000 --put foo=bar
+root@node3:/src# python3 -m chord.http.client node3 5000 put foo bar
 INFO:__main__:Putting key [foo] = value [bar]
-INFO:__main__:{'hops': 2, 'storage_node': 'node1:5000'}
+INFO:__main__:PutKeyResponse(storage_node=chord.node(node1:5000), hops=2)
 root@node3:/src# python3 -m chord.http.client node3 5000 --get foo
 INFO:__main__:Getting key [foo]
-INFO:__main__:{'hops': 2, 'storage_node': 'node1:5000', 'value': 'bar'}
+INFO:__main__:GetKeyResponse(storage_node=chord.node(node1:5000), hops=2, value='bar', found=True)
 ```
 
 ## Resources

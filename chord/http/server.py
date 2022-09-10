@@ -112,22 +112,17 @@ def put():
 @click.command()
 @click.argument("hostname", required=True)
 @click.argument("port", required=True)
-@click.argument("successor_list_size", required=True)
 @click.argument("ring_size", required=True)
-def run(hostname: str, port: str, successor_list_size: str, ring_size: str):
+def run(hostname: str, port: str, ring_size: str):
     node_id = f"{hostname}:{port}"
-    successor_list_size_num = int(successor_list_size)
     ring_size_num = int(ring_size)
 
-    log.info("Running on %s with successor list size %s and ring size %s...",
-            node_id, successor_list_size, ring_size)
-    transport = HttpChordTransport(successor_list_size_num)
+    log.info("Running on %s with ring size %s...", node_id, ring_size)
+    transport = HttpChordTransport(ring_size_num)
 
     app.config["marshaller"] = JsonChordMarshaller()
     app.config["unmarshaller"] = JsonChordUnmarshaller(transport)
-    app.config["node"] = ChordNode(
-            node_id, DictChordStorage(), successor_list_size_num, ring_size_num
-    )
+    app.config["node"] = ChordNode(node_id, DictChordStorage(), ring_size_num)
     app.config["node"].schedule_maintenance_tasks()
     app.run(hostname, int(port))
 

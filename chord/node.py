@@ -30,20 +30,18 @@ logger = logging.getLogger(__name__)
 
 class ChordNode:
     """ Base Chord DHT Node implementation. """
-    def __init__(
-            self, node_id: str, storage: ChordStorage, successor_list_size: int, ring_size: int
-    ):
-        # TODO: Split options into protocol, config, storage_handler
+    def __init__(self, node_id: str, storage: ChordStorage, ring_size: int):
+        # TODO: Split options into config, storage_handler
         self.node_id = node_id
-        self.predecessor: Optional[ChordNode] = None
+
+        self._predecessor: Optional[ChordNode] = None
         self._storage = storage
         self._next = 0
         self._is_shutdown = False
-        self._successor_list_size = successor_list_size
 
-        self.ring_size = ring_size
-        self.fingers: list[Optional[ChordNode]] = [None] * ring_size
-        self.successor_list: list[ChordNode] = []
+        self._ring_size = ring_size
+        self._fingers: list[Optional[ChordNode]] = [None] * ring_size
+        self._successor_list: list[ChordNode] = []
 
     def schedule_maintenance_tasks(self, interval_seconds: int=1):
         def loop():
@@ -78,7 +76,7 @@ class ChordNode:
 
     def __repr__(self) -> str:
         bucket = repr(self._bucketize(self.node_id))
-        return f"{__name__}({self.node_id}, {bucket}, {self.ring_size})"
+        return f"{__name__}({self.node_id}, {bucket}, {self._ring_size})"
 
     def _bucketize(self, string: str) -> int:
         """
@@ -86,7 +84,7 @@ class ChordNode:
         :param key: The key to hash
         """
         digest = sha256(string.encode()).digest()
-        bucket = int.from_bytes(digest, 'big') % 2 ** self.ring_size
+        bucket = int.from_bytes(digest, 'big') % 2 ** self._ring_size
         return bucket
 
     @staticmethod
@@ -119,7 +117,7 @@ class ChordNode:
         """ Creates a Chord ring. """
         if self.get_successor_list(GetSuccessorListRequest()).successor_list:
             raise RuntimeError("Node already initialized")
-        self.successor_list = [self] * self._successor_list_size
+        self._successor_list = [self] * self._ring_size
         return CreateResponse()
 
     def join(self, request: JoinRequest) -> JoinResponse:
@@ -130,7 +128,7 @@ class ChordNode:
         if self.get_successor_list(GetSuccessorListRequest()).successor_list:
             raise RuntimeError("Node already initialized")
         successor = request.remote_node.find_successor(FindSuccessorRequest(self._bucketize(self.node_id))).node
-        self.successor_list = successor.get_successor_list(GetSuccessorListRequest()).successor_list
+        self._successor_list = successor.get_successor_list(GetSuccessorListRequest()).successor_list
         return JoinResponse()
 
     def node(self, request: NodeRequest) -> NodeResponse:
@@ -151,19 +149,19 @@ class ChordNode:
             possible_successor = current_successor.get_predecessor(GetPredecessorRequest()).node
             successor_successor_list = current_successor.get_successor_list(GetSuccessorListRequest()).successor_list
 
-            self.successor_list = [current_successor, *successor_successor_list[:-1]]
+            self._successor_list = [current_successor, *successor_successor_list[:-1]]
             if (possible_successor
                     and self._between_nodes(possible_successor, self, current_successor)):
                 try:
                     new_successor_list = possible_successor.get_successor_list(GetSuccessorListRequest()).successor_list
-                    self.successor_list = [possible_successor, *new_successor_list[:-1]]
+                    self._successor_list = [possible_successor, *new_successor_list[:-1]]
                 except NodeFailureException:
                     # possible_successor is dead, no change
                     pass
 
         except NodeFailureException:
             # Remove dead successor
-            self.successor_list = [*self.successor_list[1:], self]
+            self._successor_list = [*self._successor_list[1:], self]
 
         self._get_successor().notify(NotifyRequest(self))
 
@@ -183,11 +181,11 @@ class ChordNode:
         """ Refreshes finger table entries. """
         finger_bucket = self._bucketize(self.node_id)
         finger_bucket += 2 ** self._next
-        finger_bucket %= 2 ** self.ring_size
+        finger_bucket %= 2 ** self._ring_size
 
-        self.fingers[self._next] = self.find_successor(FindSuccessorRequest(finger_bucket)).node
+        self._fingers[self._next] = self.find_successor(FindSuccessorRequest(finger_bucket)).node
 
-        self._next = (self._next + 1) % self.ring_size
+        self._next = (self._next + 1) % self._ring_size
 
     def check_predecessor(self) -> None:
         """ Check that the predecessor is still alive. """
@@ -205,7 +203,7 @@ class ChordNode:
         else:
             key_bucket = self._bucketize(str(request.key))
 
-        key_bucket %= 2 ** self.ring_size
+        key_bucket %= 2 ** self._ring_size
 
         current_successor = self._get_successor()
         if (self._between(
@@ -235,9 +233,9 @@ class ChordNode:
         immediately precedes the key in the Chord ring.
         :param key: A string key
         """
-        real_fingers = [f for f in self.fingers if f is not None]  # for mypy
+        real_fingers = [f for f in self._fingers if f is not None]  # for mypy
         succeeding_nodes = sorted(
-                set(self.successor_list + real_fingers),
+                set(self._successor_list + real_fingers),
                 key=lambda node: self._bucketize(node.node_id)
         )
 
@@ -273,20 +271,20 @@ class ChordNode:
 
     def _get_successor(self) -> ChordNode:
         """ Return this node's successor. """
-        return self.successor_list[0]
+        return self._successor_list[0]
 
     def get_successor_list(self, request: GetSuccessorListRequest) -> GetSuccessorListResponse:
         """ Returns this node's successor list. """
-        return GetSuccessorListResponse(self.successor_list)
+        return GetSuccessorListResponse(self._successor_list)
 
     # Not using @properties for these since RPC doesn't work well with them
     def get_predecessor(self, request: GetPredecessorRequest) -> GetPredecessorResponse:
         """ Returns the predecessor node. """
-        return GetPredecessorResponse(self.predecessor)
+        return GetPredecessorResponse(self._predecessor)
 
     def set_predecessor(self, value: Optional[ChordNode]) -> None:
         """ Sets this node's predecessor. """
-        self.predecessor = value
+        self._predecessor = value
 
     def get(self, request: GetKeyRequest) -> GetKeyResponse:
         """
@@ -320,7 +318,7 @@ class RemoteChordNode(ChordNode):
     """ ChordNode proxy for remote operations. """
 
     def __init__(self, transport, node_id: str):
-        super().__init__(node_id, NullChordStorage(), 0, 0)
+        super().__init__(node_id, NullChordStorage(), 0)
         self._transport = transport
         self._connection = transport.create_connection(node_id)
 

@@ -44,15 +44,15 @@ class HttpChordConnection(ChordConnection):
 
 
 class HttpChordTransport(ChordTransport):
-    def __init__(self, successor_list_size: int):
+    def __init__(self, ring_size: int):
         self._marshaller = JsonChordMarshaller()
         self._unmarshaller = JsonChordUnmarshaller(self)
-        self._successor_list_size = successor_list_size
+        self._ring_size = ring_size
 
         self._session = requests.Session()
         adapter = requests.adapters.HTTPAdapter(
                 max_retries=3,
-                pool_connections=self._successor_list_size + 5,
+                pool_connections=self._ring_size + 5,
         )
         self._session.mount("http://", adapter)
 

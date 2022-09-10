@@ -27,9 +27,8 @@ joined_list: list[str] = []
 
 @click.command()
 @click.option("--num-nodes", type=int, required=True, help="Number of nodes to simulate")
-@click.option("--successor-list-size", type=int, required=True, help="Successor list size")
 @click.option("--ring-size", type=int, required=True, help="Chord ring size")
-def main(num_nodes: int, successor_list_size: int, ring_size: int):
+def main(num_nodes: int, ring_size: int):
     transport = LocalChordTransport()
 
     # Start maintenance thread
@@ -50,11 +49,10 @@ def main(num_nodes: int, successor_list_size: int, ring_size: int):
 
     # Init nodes
     print("Initiating node ring...")
-    create_node(transport, successor_list_size, ring_size)
+    create_node(transport, ring_size)
     for _ in range(num_nodes - 1):
         create_node(
                 transport,
-                successor_list_size,
                 ring_size,
                 choice(joined_list)
         )
@@ -103,7 +101,6 @@ def main(num_nodes: int, successor_list_size: int, ring_size: int):
         if choices([True, False], weights=[5, 95])[0]:
             create_node(
                 transport,
-                successor_list_size,
                 ring_size,
                 choice(joined_list)
             )
@@ -148,9 +145,9 @@ class LocalChordTransport:
 
 
 class LocalChordHandler:
-    def __init__(self, node_id, transport, storage, successor_list_size, ring_size):
+    def __init__(self, node_id, transport, storage, ring_size):
         self._node_id = node_id
-        self._node: ChordNode = ChordNode(node_id, storage, successor_list_size, ring_size)
+        self._node: ChordNode = ChordNode(node_id, storage, ring_size)
         self._marshaller = JsonChordMarshaller()
         self._unmarshaller = JsonChordUnmarshaller(transport)
 
@@ -217,9 +214,9 @@ def print_stats(in_list):
     print("p100", percentile(100, sorted_in_list))
 
 
-def create_node(transport, successor_list_size, ring_size, join_node_id=None):
+def create_node(transport, ring_size, join_node_id=None):
     node_id = uuid4().hex
-    node = LocalChordHandler(node_id, transport, DictChordStorage(), successor_list_size, ring_size)
+    node = LocalChordHandler(node_id, transport, DictChordStorage(), ring_size)
     nodes[node_id] = node
     joined_list.append(node_id)
     print("Added %s" % node_id)

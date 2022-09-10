@@ -30,10 +30,10 @@ log.setLevel(logging.DEBUG)
 # Needed since XMLRPC marshals object instances to Dict when sending but
 # doesn't unmarshal them when receiving.
 class ChordNodeProxy:
-    def __init__(self, node_id, storage, successor_list_size, ring_size):
+    def __init__(self, node_id, storage, ring_size):
         transport = XmlRpcChordTransport()
 
-        self._node: ChordNode = ChordNode(node_id, storage, successor_list_size, ring_size)
+        self._node: ChordNode = ChordNode(node_id, storage, ring_size)
         self._marshaller = JsonChordMarshaller()
         self._unmarshaller = JsonChordUnmarshaller(transport)
 
@@ -103,19 +103,14 @@ class ThreadedXmlRpcServer(socketserver.ThreadingMixIn, SimpleXMLRPCServer):
 @click.command()
 @click.argument("hostname", required=True)
 @click.argument("port", required=True)
-@click.argument("successor_list_size", required=True)
 @click.argument("ring_size", required=True)
-def run(hostname: str, port: str, successor_list_size: str, ring_size: str):
+def run(hostname: str, port: str, ring_size: str):
     node_id = f"{hostname}:{port}"
     port_num = int(port)
-    successor_list_size_num = int(successor_list_size)
     ring_size_num = int(ring_size)
 
-    log.info("Running on %s with successor list size %s and ring size %s...",
-            node_id, successor_list_size_num, ring_size_num)
-    node = ChordNodeProxy(
-            node_id, DictChordStorage(), successor_list_size_num, ring_size_num
-    )
+    log.info("Running on %s with ring size %s...", node_id, ring_size_num)
+    node = ChordNodeProxy(node_id, DictChordStorage(), ring_size_num)
     node.schedule_maintenance_tasks()
 
     with ThreadedXmlRpcServer((hostname, port_num), allow_none=True) as server:

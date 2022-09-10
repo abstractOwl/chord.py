@@ -212,12 +212,12 @@ class ChordNode:
                 self._bucketize(current_successor.node_id)
         ) or self._bucketize(current_successor.node_id) == request.key):
             if current_successor.is_alive():
-                return FindSuccessorResponse(current_successor, 1)
-            return FindSuccessorResponse(self, 1)
+                return FindSuccessorResponse(current_successor, 0)
+            return FindSuccessorResponse(self, 0)
 
         for closest in self.closest_preceding_nodes(key_bucket):
             if closest == self:
-                return FindSuccessorResponse(self, 1)
+                return FindSuccessorResponse(self, 0)
 
             try:
                 response = closest.find_successor(FindSuccessorRequest(key_bucket))

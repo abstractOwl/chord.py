@@ -1,4 +1,5 @@
 import logging
+import os
 
 import click
 from flask import Flask, request
@@ -90,7 +91,8 @@ def shutdown():
         log.info("%s: %s", SHUTDOWN, req)
         return app.config["marshaller"].marshal(app.config["node"].shutdown(req))
     finally:
-        request.environ.get('werkzeug.server.shutdown')()
+        # Note that this usually runs before the ShutdownResponse can be returned
+        os._exit(0)
 
 
 @app.route("/" + GET_KEY, methods=["POST"])

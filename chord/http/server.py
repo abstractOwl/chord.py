@@ -1,8 +1,8 @@
-import argparse
 import logging
 import threading
 import time
 
+import click
 from flask import Flask, request
 from flask.logging import create_logger
 
@@ -22,37 +22,33 @@ from chord.node import ChordNode
 from chord.storage import DictChordStorage
 
 
-APP = Flask(__name__)
-CHORD_NODE = None
-TRANSPORT = None
-MARSHALLER = None
-UNMARSHALLER = None
+app = Flask(__name__)
 
 logging.basicConfig()
-LOG = create_logger(APP)
-LOG.setLevel(logging.INFO)
+log = create_logger(app)
+log.setLevel(logging.INFO)
 
 
-@APP.before_first_request
+@app.before_first_request
 def schedule_maintenance_tasks():
     def loop():
         while True:
-            if CHORD_NODE.get_successor_list(GetSuccessorListRequest()).successor_list:
-                LOG.info("Running maintenance tasks...")
+            if app.config["node"].get_successor_list(GetSuccessorListRequest()).successor_list:
+                log.info("Running maintenance tasks...")
 
                 try:
-                    CHORD_NODE.fix_fingers()
+                    app.config["node"].fix_fingers()
                 except NodeFailureException:
-                    LOG.info("Node failed while trying to fix fingers")
+                    log.info("Node failed while trying to fix fingers")
 
                 try:
-                    CHORD_NODE.stabilize()
+                    app.config["node"].stabilize()
                 except NodeFailureException:
-                    LOG.info("Node failed while trying to stabilize")
+                    log.info("Node failed while trying to stabilize")
 
-                CHORD_NODE.check_predecessor()
+                app.config["node"].check_predecessor()
 
-                LOG.info("Done.")
+                log.info("Done.")
 
             time.sleep(1)
 
@@ -60,107 +56,109 @@ def schedule_maintenance_tasks():
     thread.start()
 
 
-@APP.route("/" + NODE, methods=["POST"])
+@app.route("/" + NODE, methods=["POST"])
 def node_info():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, NodeRequest)
-    LOG.info("%s: %s", NODE, req)
-    return MARSHALLER.marshal(CHORD_NODE.node(req))
+    req = app.config["unmarshaller"].unmarshal(payload, NodeRequest)
+    log.info("%s: %s", NODE, req)
+    return app.config["marshaller"].marshal(app.config["node"].node(req))
 
 
-@APP.route("/" + CREATE, methods=["POST"])
+@app.route("/" + CREATE, methods=["POST"])
 def create():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, CreateRequest)
-    LOG.info("%s: %s", CREATE, req)
-    return MARSHALLER.marshal(CHORD_NODE.create(req))
+    req = app.config["unmarshaller"].unmarshal(payload, CreateRequest)
+    log.info("%s: %s", CREATE, req)
+    return app.config["marshaller"].marshal(app.config["node"].create(req))
 
 
-@APP.route("/" + FIND_SUCCESSOR, methods=["POST"])
+@app.route("/" + FIND_SUCCESSOR, methods=["POST"])
 def find_successor():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, FindSuccessorRequest)
-    LOG.info("%s: %s", FIND_SUCCESSOR, req)
-    return MARSHALLER.marshal(CHORD_NODE.find_successor(req))
+    req = app.config["unmarshaller"].unmarshal(payload, FindSuccessorRequest)
+    log.info("%s: %s", FIND_SUCCESSOR, req)
+    return app.config["marshaller"].marshal(app.config["node"].find_successor(req))
 
 
-@APP.route("/" + JOIN, methods=["POST"])
+@app.route("/" + JOIN, methods=["POST"])
 def join():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, JoinRequest)
-    LOG.info("%s: %s", JOIN, req)
-    return MARSHALLER.marshal(CHORD_NODE.join(req))
+    req = app.config["unmarshaller"].unmarshal(payload, JoinRequest)
+    log.info("%s: %s", JOIN, req)
+    return app.config["marshaller"].marshal(app.config["node"].join(req))
 
 
-@APP.route("/" + NOTIFY, methods=["POST"])
+@app.route("/" + NOTIFY, methods=["POST"])
 def notify():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, NotifyRequest)
-    LOG.info("%s: %s", NOTIFY, req)
-    return MARSHALLER.marshal(CHORD_NODE.notify(req))
+    req = app.config["unmarshaller"].unmarshal(payload, NotifyRequest)
+    log.info("%s: %s", NOTIFY, req)
+    return app.config["marshaller"].marshal(app.config["node"].notify(req))
 
 
-@APP.route("/" + GET_PREDECESSOR, methods=["POST"])
+@app.route("/" + GET_PREDECESSOR, methods=["POST"])
 def get_predecessor():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, GetPredecessorRequest)
-    LOG.info("%s: %s", GET_PREDECESSOR, req)
-    return MARSHALLER.marshal(CHORD_NODE.get_predecessor(req))
+    req = app.config["unmarshaller"].unmarshal(payload, GetPredecessorRequest)
+    log.info("%s: %s", GET_PREDECESSOR, req)
+    return app.config["marshaller"].marshal(app.config["node"].get_predecessor(req))
 
 
-@APP.route("/" + GET_SUCCESSOR_LIST, methods=["POST"])
+@app.route("/" + GET_SUCCESSOR_LIST, methods=["POST"])
 def get_successor_list():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, GetSuccessorListRequest)
-    LOG.info("%s: %s", GET_SUCCESSOR_LIST, req)
-    return MARSHALLER.marshal(CHORD_NODE.get_successor_list(req))
+    req = app.config["unmarshaller"].unmarshal(payload, GetSuccessorListRequest)
+    log.info("%s: %s", GET_SUCCESSOR_LIST, req)
+    return app.config["marshaller"].marshal(app.config["node"].get_successor_list(req))
 
 
-@APP.route("/" + SHUTDOWN, methods=["POST"])
+@app.route("/" + SHUTDOWN, methods=["POST"])
 def shutdown():
     try:
         payload = request.get_json(force=True)
-        req = UNMARSHALLER.unmarshal(payload, ShutdownRequest)
-        LOG.info("%s: %s", SHUTDOWN, req)
-        return MARSHALLER.marshal(CHORD_NODE.shutdown(req))
+        req = app.config["unmarshaller"].unmarshal(payload, ShutdownRequest)
+        log.info("%s: %s", SHUTDOWN, req)
+        return app.config["marshaller"].marshal(app.config["node"].shutdown(req))
     finally:
         request.environ.get('werkzeug.server.shutdown')()
 
 
-@APP.route("/" + GET_KEY, methods=["POST"])
+@app.route("/" + GET_KEY, methods=["POST"])
 def get():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, GetKeyRequest)
-    LOG.info("%s: %s", GET_KEY, req)
-    return MARSHALLER.marshal(CHORD_NODE.get(req))
+    req = app.config["unmarshaller"].unmarshal(payload, GetKeyRequest)
+    log.info("%s: %s", GET_KEY, req)
+    return app.config["marshaller"].marshal(app.config["node"].get(req))
 
 
-@APP.route("/" + PUT_KEY, methods=["POST"])
+@app.route("/" + PUT_KEY, methods=["POST"])
 def put():
     payload = request.get_json(force=True)
-    req = UNMARSHALLER.unmarshal(payload, PutKeyRequest)
-    LOG.info("%s: %s", PUT_KEY, req)
-    return MARSHALLER.marshal(CHORD_NODE.put(req))
+    req = app.config["unmarshaller"].unmarshal(payload, PutKeyRequest)
+    log.info("%s: %s", PUT_KEY, req)
+    return app.config["marshaller"].marshal(app.config["node"].put(req))
 
+
+@click.command()
+@click.argument("hostname", required=True)
+@click.argument("port", required=True)
+@click.argument("successor_list_size", required=True)
+@click.argument("ring_size", required=True)
+def run(hostname: str, port: str, successor_list_size: str, ring_size: str):
+    node_id = f"{hostname}:{port}"
+    successor_list_size_num = int(successor_list_size)
+    ring_size_num = int(ring_size)
+
+    log.info("Running on %s with successor list size %s and ring size %s...",
+            node_id, successor_list_size, ring_size)
+    transport = HttpChordTransport(successor_list_size_num)
+
+    app.config["marshaller"] = JsonChordMarshaller()
+    app.config["unmarshaller"] = JsonChordUnmarshaller(transport)
+    app.config["node"] = ChordNode(
+            node_id, DictChordStorage(), successor_list_size_num, ring_size_num
+    )
+    app.run(hostname, int(port))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Runs a Chord server.")
-    parser.add_argument("hostname", type=str, help="The server hostname.")
-    parser.add_argument("port", type=int, help="The server port")
-    parser.add_argument("successor_list_size", type=int, help="The successor list size")
-    parser.add_argument("ring_size", type=int, help="The server port")
-    args = parser.parse_args()
-
-    hostname = args.hostname
-    port = args.port
-    successor_list_size = args.successor_list_size
-    ring_size = args.ring_size
-    node_id = f"{hostname}:{port}"
-
-    LOG.info("Running on %s with successor list size %s and ring size %s...",
-            node_id, successor_list_size, ring_size)
-    TRANSPORT = HttpChordTransport(successor_list_size)
-    MARSHALLER = JsonChordMarshaller()
-    UNMARSHALLER = JsonChordUnmarshaller(TRANSPORT)
-    CHORD_NODE = ChordNode(node_id, DictChordStorage(), successor_list_size, ring_size)
-    APP.run(hostname, port)
+    run()

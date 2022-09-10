@@ -171,7 +171,11 @@ class ChordNode:
         Returns the successor node for a given key or bucket.
         :param key: A string key or numeric bucket
         """
-        key_bucket = request.key if isinstance(request.key, int) else self._bucketize(str(request.key))
+        if isinstance(request.key, int):
+            key_bucket = request.key
+        else:
+            key_bucket = self._bucketize(str(request.key))
+
         key_bucket %= 2 ** self.ring_size
 
         current_successor = self._get_successor()

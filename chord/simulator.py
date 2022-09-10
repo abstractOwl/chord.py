@@ -1,4 +1,3 @@
-import argparse
 import json
 from math import ceil
 from random import choice, choices
@@ -6,6 +5,8 @@ from time import sleep
 from threading import Thread
 from typing import Optional, Type
 from uuid import uuid4
+
+import click
 
 from chord.exceptions import NodeFailureException
 from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
@@ -24,16 +25,11 @@ ITERATIONS: int = 1000
 joined_list: list[str] = []
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Simulates a Chord ring.")
-    parser.add_argument("nodes", type=int, help="Number of nodes to simulate.")
-    parser.add_argument("successor_list_size", type=int, help="Successor list size")
-    parser.add_argument("ring_size", type=int, help="Chord ring size.")
-
-    args = parser.parse_args()
-    successor_list_size = args.successor_list_size
-    ring_size = args.ring_size
-
+@click.command()
+@click.option("--num-nodes", type=int, required=True, help="Number of nodes to simulate")
+@click.option("--successor-list-size", type=int, required=True, help="Successor list size")
+@click.option("--ring-size", type=int, required=True, help="Chord ring size")
+def main(num_nodes: int, successor_list_size: int, ring_size: int):
     transport = LocalChordTransport()
 
     # Start maintenance thread
@@ -55,7 +51,7 @@ def main():
     # Init nodes
     print("Initiating node ring...")
     create_node(transport, successor_list_size, ring_size)
-    for _ in range(args.nodes - 1):
+    for _ in range(num_nodes - 1):
         create_node(
                 transport,
                 successor_list_size,

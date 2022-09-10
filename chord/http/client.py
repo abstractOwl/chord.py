@@ -1,6 +1,11 @@
-import argparse
 import logging
 
+import click
+
+from chord.constants import (
+        NODE, CREATE, FIND_SUCCESSOR, JOIN, NOTIFY, GET_PREDECESSOR, GET_SUCCESSOR_LIST, SHUTDOWN,
+        GET_KEY, PUT_KEY
+)
 from chord.model import (
         NodeRequest, CreateRequest, FindSuccessorRequest, JoinRequest, NotifyRequest,
         GetPredecessorRequest, GetSuccessorListRequest, ShutdownRequest, GetKeyRequest,
@@ -14,78 +19,102 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+transport = HttpChordTransport(5)
+
+
+@click.group()
+@click.pass_context
+@click.argument("hostname", required=True)
+@click.argument("port", required=True)
+def cli(ctx, hostname, port):
+    ctx.ensure_object(dict)
+    node_id = f"{hostname}:{port}"
+    ctx.obj["NODE"] = RemoteChordNode(transport, node_id)
+
+
+@cli.command(CREATE)
+@click.pass_context
+def create(ctx):
+    node = ctx.obj["NODE"]
+    logger.info("Creating node ring at [%s]", node)
+    logger.info(node.create(CreateRequest()))
+
+@cli.command(NODE)
+@click.pass_context
+def node_info(ctx):
+    node = ctx.obj["NODE"]
+    logger.info("Getting node info from [%s]", node)
+    logger.info(node.node(NodeRequest()))
+
+@cli.command(FIND_SUCCESSOR)
+@click.pass_context
+@click.argument("key", required=True)
+def find_successor(ctx, key):
+    node = ctx.obj["NODE"]
+    logger.info("Finding successor for [%s] starting at [%s]", key, node)
+    logger.info(node.find_successor(FindSuccessorRequest(key)))
+
+
+@cli.command(JOIN)
+@click.pass_context
+@click.argument("hostname", required=True)
+@click.argument("port", required=True)
+def join(ctx, hostname, port):
+    node = ctx.obj["NODE"]
+    node_id = f"{hostname}:{port}"
+    remote_node = RemoteChordNode(transport, node_id)
+    logger.info("Joining [%s] to node [%s]", node, remote_node)
+    logger.info(node.join(JoinRequest(remote_node)))
+
+@cli.command(NOTIFY)
+@click.pass_context
+@click.argument("hostname", required=True)
+@click.argument("port", required=True)
+def notify(ctx, hostname, port):
+    node = ctx.obj["NODE"]
+    node_id = f"{hostname}:{port}"
+    remote_node = RemoteChordNode(transport, node_id)
+    logger.info("Notifying [%s] of node [%s]", node, remote_node)
+    logger.info(node.notify(NotifyRequest(remote_node)))
+
+@cli.command(GET_PREDECESSOR)
+@click.pass_context
+def get_predecessor(ctx):
+    node = ctx.obj["NODE"]
+    logger.info("Getting predecessor info from [%s]", node)
+    logger.info(node.get_predecessor(GetPredecessorRequest()))
+
+@cli.command(GET_SUCCESSOR_LIST)
+@click.pass_context
+def get_successor_list(ctx):
+    node = ctx.obj["NODE"]
+    logger.info("Getting successor list from [%s]", node)
+    logger.info(node.get_successor_list(GetSuccessorListRequest()))
+
+@cli.command(SHUTDOWN)
+@click.pass_context
+def shutdown(ctx):
+    node = ctx.obj["NODE"]
+    logger.info("Shutting node [%s] down gracefully", node)
+    logger.info(node.shutdown(ShutdownRequest()))
+
+@cli.command(GET_KEY)
+@click.pass_context
+@click.argument("key", required=True)
+def get_key(ctx, key):
+    node = ctx.obj["NODE"]
+    logger.info("Getting key [%s]", key)
+    logger.info(node.get(GetKeyRequest(key)))
+
+@cli.command(PUT_KEY)
+@click.pass_context
+@click.argument("key", required=True)
+@click.argument("value", required=True)
+def put_key(ctx, key, value):
+    node = ctx.obj["NODE"]
+    logger.info("Putting key [%s] = value [%s]", key, value)
+    logger.info(node.put(PutKeyRequest(key, value)))
+
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Runs a Chord server.")
-    parser.add_argument("hostname", type=str, help="The server hostname.")
-    parser.add_argument("port", type=int, help="The server port")
-
-    command_group = parser.add_mutually_exclusive_group()
-    command_group.add_argument("--node", action='store_true',
-            help="Returns the node info.")
-    command_group.add_argument("--create", action='store_true',
-            help="Creates a new node ring.")
-    command_group.add_argument("--find_successor", type=str,
-            help="Finds the successor for a given bucket.")
-    command_group.add_argument("--join", type=str,
-            help="Joins this node to a node ring")
-    command_group.add_argument("--notify", type=str,
-            help="Notifies a node that a node might be its predecessor")
-    command_group.add_argument("--predecessor", action='store_true',
-            help="Returns the predecessor node")
-    command_group.add_argument("--successor_list", action='store_true',
-            help="Returns the node's successor list")
-    command_group.add_argument("--shutdown", action='store_true',
-            help="Shuts the node down gracefully")
-    command_group.add_argument("--get", type=str,
-            help="Returns the stored value for a key")
-    command_group.add_argument("--put", type=str,
-            help="Stores a value in Chord (format 'key=value')")
-
-    args = parser.parse_args()
-
-    hostname = args.hostname
-    port = args.port
-
-    node_id = f"{hostname}:{port}"
-
-
-    transport = HttpChordTransport(5)
-    node = RemoteChordNode(transport, node_id)
-
-    if args.node:
-        logger.info("Getting node info from [%s]", node)
-        logger.info(node.node(NodeRequest()))
-    elif args.create:
-        logger.info("Creating node ring at [%s]", node)
-        logger.info(node.create(CreateRequest()))
-    elif args.find_successor:
-        key = args.find_successor
-        logger.info("Finding successor for [%s] starting at [%s]", key, node)
-        logger.info(node.find_successor(FindSuccessorRequest(key)))
-    elif args.join:
-        remote_node = RemoteChordNode(transport, args.join)
-        logger.info("Joining [%s] to node [%s]", node, remote_node)
-        logger.info(node.join(JoinRequest(remote_node)))
-    elif args.notify:
-        remote_node = RemoteChordNode(transport, args.join)
-        logger.info("Notifying [%s] of node [%s]", node, remote_node)
-        logger.info(node.notify(NotifyRequest(remote_node)))
-    elif args.predecessor:
-        logger.info("Getting predecessor info from [%s]", node)
-        logger.info(node.get_predecessor(GetPredecessorRequest()))
-    elif args.successor_list:
-        logger.info("Getting successor list from [%s]", node)
-        logger.info(node.get_successor_list(GetSuccessorListRequest()))
-    elif args.shutdown:
-        logger.info("Shutting node [%s] down gracefully", node)
-        logger.info(node.shutdown(ShutdownRequest()))
-    elif args.get:
-        logger.info("Getting key [%s]", args.get)
-        logger.info(node.get(GetKeyRequest(args.get)))
-    elif args.put:
-        key, value = args.put.split("=", 1)
-        logger.info("Putting key [%s] = value [%s]", key, value)
-        logger.info(node.put(PutKeyRequest(key, value)))
-    else:
-        logger.error("Must specify a command")
+    cli(obj={})

@@ -1,3 +1,7 @@
 # .pylintrc
+[MASTER]
+disable=
+    C0114,
+
 [TYPECHECK]
 signature-mutators=click.decorators.argument,click.decorators.command,click.decorators.option

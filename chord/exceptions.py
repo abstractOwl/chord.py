@@ -1,2 +1,2 @@
 class NodeFailureException(Exception):
-    pass
+    """The node could not be reached."""

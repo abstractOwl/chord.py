@@ -15,40 +15,42 @@ if TYPE_CHECKING:
 RequestResponse = TypeVar("RequestResponse")
 
 
-class ChordMarshaller(abc.ABC):
-    def marshal(self, request: Union[BaseRequest, BaseResponse]) -> str:
-        pass
-
-
-class ChordUnmarshaller(abc.ABC):
-    def unmarshal(self, payload: dict, cls: Type[RequestResponse]) -> RequestResponse:
-        pass
-
-
 class UnmarshalError(ValueError):
-    pass
+    """Failed to unmarshal the payload into the specified class."""
+
+
+class ChordMarshaller(abc.ABC):
+    """Abstract class that handles marshalling requests and responses to and from the expected
+    payload format.
+    """
+    def marshal(self, obj: Union[BaseRequest, BaseResponse]) -> str:
+        """Marshals a request or response into a string payload.
+
+        :param obj: a sub-class of :class:`BaseRequest` or :class:`BaseResponse` to marshal
+        :return: a `str` payload
+        """
+
+    def unmarshal(self, payload: dict, cls: Type[RequestResponse]) -> RequestResponse:
+        """Unmarshals a :class:`dict` payload into the expected request/response object.
+
+        :param payload: the :class:`dict` payload
+        :param cls: the :class:`BaseRequest` or :class:`BaseResponse` sub-class to unmarshal the
+                    payload into
+        :return: an instance of the `cls`
+        """
 
 
 class JsonChordMarshaller(ChordMarshaller):
-    def marshal(self, request: Union[BaseRequest, BaseResponse]):
-        return json.dumps(request, cls=JsonChordEncoder)
-
-
-class JsonChordEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, (BaseRequest, BaseResponse)):
-            return o.__dict__
-        if isinstance(o, ChordNode):
-            return o.node_id
-        return super().default(o)
-
-
-class JsonChordUnmarshaller(ChordUnmarshaller):
+    """Marshals requests/responses to and from JSON."""
     def __init__(self, transport: ChordTransport):
         self._transport = transport
 
+    def marshal(self, obj: Union[BaseRequest, BaseResponse]):
+        return json.dumps(obj, cls=JsonChordEncoder)
+
     @staticmethod
     def _is_optional(value_cls) -> bool:
+        """Returns `True` if a type is an :class:`Optional`."""
         return (
                 get_origin(value_cls) is Union
                 and len(get_args(value_cls)) == 2
@@ -56,6 +58,7 @@ class JsonChordUnmarshaller(ChordUnmarshaller):
         )
 
     def _parse_value(self, value: Any, cls: Type) -> Any:
+        """Recursively unpacks and parses :class:`ChordNode` fields."""
         if cls == ChordNode:
             value = RemoteChordNode(self._transport, value)
         elif self._is_optional(cls):
@@ -75,3 +78,13 @@ class JsonChordUnmarshaller(ChordUnmarshaller):
         # Pass arguments to Request/Response class constructor
         params = [self._parse_value(payload[param], hint_cls) for param, hint_cls in hints.items()]
         return cls(*params)
+
+
+class JsonChordEncoder(json.JSONEncoder):
+    """An extended :class:`JSONEncoder` which converts :class:`ChordNode`s to a `str` node id."""
+    def default(self, o):
+        if isinstance(o, (BaseRequest, BaseResponse)):
+            return o.__dict__
+        if isinstance(o, ChordNode):
+            return o.node_id
+        return super().default(o)

@@ -10,83 +10,93 @@ if TYPE_CHECKING:
 
 @dataclass
 class BaseRequest:
-    pass
+    """Request super-class."""
 
 @dataclass
 class BaseResponse:
-    pass
+    """Response super-class."""
 
 @dataclass
 class NodeRequest(BaseRequest):
-    pass
+    """Request for Node operation."""
 
 @dataclass
 class NodeResponse(BaseResponse):
+    """Response for Node operation."""
     node: chord.node.ChordNode
+    is_alive: bool
 
 @dataclass
 class CreateRequest(BaseRequest):
-    pass
+    """Request for Create operation."""
 
 @dataclass
 class CreateResponse(BaseResponse):
-    pass
+    """Response for Create operation."""
 
 @dataclass
 class FindSuccessorRequest(BaseRequest):
+    """Request for FindSuccessorRequest operation."""
     key: Union[int, str]
 
 @dataclass
 class FindSuccessorResponse(BaseResponse):
+    """Response for FindSuccessorRequest operation."""
     node: chord.node.ChordNode
     hops: int
 
 @dataclass
 class JoinRequest(BaseRequest):
+    """Request for Join operation."""
     remote_node: chord.node.ChordNode
 
 @dataclass
 class JoinResponse(BaseResponse):
-    pass
+    """Response for Join operation."""
 
 @dataclass
 class NotifyRequest(BaseRequest):
+    """Request for Notify operation."""
     remote_node: Optional[chord.node.ChordNode]
 
 @dataclass
 class NotifyResponse(BaseResponse):
-    pass
+    """Response for Notify operation."""
 
 @dataclass
 class GetPredecessorRequest(BaseRequest):
-    pass
+    """Request for GetPredecessor operation."""
 
 @dataclass
 class GetPredecessorResponse(BaseResponse):
+    """Response for GetPredecessor operation."""
     node: Optional[chord.node.ChordNode]
 
 @dataclass
 class GetSuccessorListRequest(BaseRequest):
-    pass
+    """Request for GetSuccessorList operation."""
 
 @dataclass
 class GetSuccessorListResponse(BaseResponse):
+    """Response for GetSuccessorList operation."""
     successor_list: list[chord.node.ChordNode]
 
 @dataclass
 class ShutdownRequest(BaseRequest):
-    pass
+    """Request for Shutdown operation."""
 
 @dataclass
 class ShutdownResponse(BaseResponse):
-    pass
+    """Response for Shutdown operation."""
 
 @dataclass
 class GetKeyRequest(BaseRequest):
+    """Request for GetKey operation."""
     key: str
 
 @dataclass
 class GetKeyResponse(BaseResponse):
+    """Response for GetKey operation."""
     storage_node: chord.node.ChordNode
     hops: int
     value: Optional[str]
@@ -94,11 +104,13 @@ class GetKeyResponse(BaseResponse):
 
 @dataclass
 class PutKeyRequest(BaseRequest):
+    """Request for PutKey operation."""
     key: str
     value: str
     no_redirect: bool = False
 
 @dataclass
 class PutKeyResponse(BaseResponse):
+    """Response for PutKey operation."""
     storage_node: chord.node.ChordNode
     hops: int

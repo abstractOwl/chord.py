@@ -9,14 +9,14 @@ from uuid import uuid4
 import click
 
 from chord.exceptions import NodeFailureException
-from chord.marshal import JsonChordMarshaller, JsonChordUnmarshaller
+from chord.marshal import JsonChordMarshaller
 from chord.model import (
         BaseRequest, BaseResponse, NodeRequest, NodeResponse, CreateRequest, CreateResponse,
         FindSuccessorRequest, FindSuccessorResponse, JoinRequest, JoinResponse, NotifyRequest,
         NotifyResponse, GetPredecessorRequest, GetPredecessorResponse, GetSuccessorListRequest,
         GetSuccessorListResponse, ShutdownRequest, ShutdownResponse, GetKeyRequest, PutKeyRequest
 )
-from chord.node import ChordNode, RemoteChordNode
+from chord.node import ChordConfig, ChordNode, RemoteChordNode
 from chord.storage import DictChordStorage
 
 
@@ -36,7 +36,7 @@ def main(num_nodes: int, ring_size: int):
         while True:
             for node_id in joined_list:
                 node = nodes[node_id]._node
-                if node.get_successor_list(GetSuccessorListRequest()).successor_list:
+                if node.is_alive():
                     try:
                         node.fix_fingers()
                         node.stabilize()
@@ -118,13 +118,10 @@ class LocalChordConnection:
     def __init__(self, transport, node_id):
         self.node_id = node_id
         self._transport = transport
-        self.marshaller = JsonChordMarshaller()
-        self.unmarshaller = JsonChordUnmarshaller(transport)
+        self.marshaller = JsonChordMarshaller(transport)
 
     def _get_node(self):
-        if (self.node_id in joined_list
-                and nodes[self.node_id]
-                and nodes[self.node_id]._node.is_alive()):
+        if self.node_id in joined_list and nodes[self.node_id]:
             return nodes[self.node_id]
         raise NodeFailureException(self.node_id)
 
@@ -136,7 +133,7 @@ class LocalChordConnection:
 
         params = self.marshaller.marshal(request)
         obj = command_fn(json.loads(params))
-        return self.unmarshaller.unmarshal(obj, response_cls)
+        return self.marshaller.unmarshal(obj, response_cls)
 
 
 class LocalChordTransport:
@@ -145,55 +142,57 @@ class LocalChordTransport:
 
 
 class LocalChordHandler:
-    def __init__(self, node_id, transport, storage, ring_size):
+    def __init__(self, node_id, transport, storage, config):
         self._node_id = node_id
-        self._node: ChordNode = ChordNode(node_id, storage, ring_size)
-        self._marshaller = JsonChordMarshaller()
-        self._unmarshaller = JsonChordUnmarshaller(transport)
+        self._node: ChordNode = ChordNode(node_id, storage, config)
+        self._marshaller = JsonChordMarshaller(transport)
 
     def create(self, payload: dict) -> CreateResponse:
-        request = self._unmarshaller.unmarshal(payload, CreateRequest)
+        request = self._marshaller.unmarshal(payload, CreateRequest)
         return json.loads(self._marshaller.marshal(self._node.create(request)))
 
     def node(self, payload: dict) -> NodeResponse:
-        request = self._unmarshaller.unmarshal(payload, NodeRequest)
+        request = self._marshaller.unmarshal(payload, NodeRequest)
         return json.loads(self._marshaller.marshal(self._node.node(request)))
 
     def join(self, payload: dict) -> JoinResponse:
-        request = self._unmarshaller.unmarshal(payload, JoinRequest)
+        request = self._marshaller.unmarshal(payload, JoinRequest)
         return json.loads(self._marshaller.marshal(self._node.join(request)))
 
     def notify(self, payload: dict) -> NotifyResponse:
-        request = self._unmarshaller.unmarshal(payload, NotifyRequest)
+        request = self._marshaller.unmarshal(payload, NotifyRequest)
         return json.loads(self._marshaller.marshal(self._node.notify(request)))
 
     def find_successor(self, payload: dict) -> FindSuccessorResponse:
-        request = self._unmarshaller.unmarshal(payload, FindSuccessorRequest)
+        request = self._marshaller.unmarshal(payload, FindSuccessorRequest)
         return json.loads(self._marshaller.marshal(self._node.find_successor(request)))
 
     def get_predecessor(self, payload: dict) -> GetPredecessorResponse:
-        request = self._unmarshaller.unmarshal(payload, GetPredecessorRequest)
+        request = self._marshaller.unmarshal(payload, GetPredecessorRequest)
         return json.loads(self._marshaller.marshal(self._node.get_predecessor(request)))
 
     def get_successor_list(self, payload: dict) -> GetSuccessorListResponse:
-        request = self._unmarshaller.unmarshal(payload, GetSuccessorListRequest)
+        request = self._marshaller.unmarshal(payload, GetSuccessorListRequest)
         return json.loads(self._marshaller.marshal(self._node.get_successor_list(request)))
 
     def shutdown(self, payload: dict) -> ShutdownResponse:
         try:
-            request = self._unmarshaller.unmarshal(payload, ShutdownRequest)
+            request = self._marshaller.unmarshal(payload, ShutdownRequest)
             return json.loads(self._marshaller.marshal(self._node.shutdown(request)))
         finally:
             del nodes[self._node_id]
             joined_list.remove(self._node_id)
 
     def get(self, payload: dict) -> GetKeyRequest:
-        request = self._unmarshaller.unmarshal(payload, GetKeyRequest)
+        request = self._marshaller.unmarshal(payload, GetKeyRequest)
         return json.loads(self._marshaller.marshal(self._node.get(request)))
 
     def put(self, payload: dict) -> PutKeyRequest:
-        request = self._unmarshaller.unmarshal(payload, PutKeyRequest)
+        request = self._marshaller.unmarshal(payload, PutKeyRequest)
         return json.loads(self._marshaller.marshal(self._node.put(request)))
+
+    def is_alive(self) -> bool:
+        return self._node.is_alive()
 
 
 def avg(in_list):
@@ -216,7 +215,7 @@ def print_stats(in_list):
 
 def create_node(transport, ring_size, join_node_id=None):
     node_id = uuid4().hex
-    node = LocalChordHandler(node_id, transport, DictChordStorage(), ring_size)
+    node = LocalChordHandler(node_id, transport, DictChordStorage(), ChordConfig(ring_size))
     nodes[node_id] = node
     joined_list.append(node_id)
     print("Added %s" % node_id)

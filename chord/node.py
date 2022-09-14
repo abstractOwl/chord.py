@@ -275,15 +275,22 @@ class ChordNode:
 
         key_bucket %= 2 ** self._config.ring_size
 
+        # If the key belongs to this node, return this node
+        if self._predecessor and self._between(
+                key_bucket,
+                self._bucketize(self._predecessor.node_id),
+                self._bucketize(self.node_id)
+        ):
+            return FindSuccessorResponse(self, 0)
+
+        # If the key belongs to successor, return successor
         current_successor = self._get_successor()
-        if (self._between(
+        if self._between(
                 key_bucket,
                 self._bucketize(self.node_id),
                 self._bucketize(current_successor.node_id)
-        ) or self._bucketize(current_successor.node_id) == request.key):
-            if current_successor.is_alive():
-                return FindSuccessorResponse(current_successor, 0)
-            return FindSuccessorResponse(self, 0)
+        ) or self._bucketize(current_successor.node_id) == key_bucket:
+            return FindSuccessorResponse(current_successor, 0)
 
         for closest in self.closest_preceding_nodes(key_bucket):
             if closest == self:
